@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>DBCam — Privacy Body-Cam (Web PoC)</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="dot"></span> DBCam <span class="tag">Web PoC</span>
+    </div>
+    <div id="profileBanner" class="profile-banner">Jurisdiction: —</div>
+  </header>
+
+  <main>
+    <section class="stage">
+      <!-- The visible preview is the BLURRED canvas. The raw <video> lives in JS
+           and is never attached to the DOM. -->
+      <div class="canvas-wrap">
+        <canvas id="preview"></canvas>
+        <canvas id="overlay" class="overlay"></canvas>
+        <div id="incidentBanner" class="incident-banner"></div>
+        <div id="fps" class="fps">— fps</div>
+      </div>
+
+      <div class="controls">
+        <button id="startBtn" class="btn primary">Start session</button>
+        <button id="stopBtn" class="btn" disabled>Stop</button>
+        <button id="eventBtn" class="btn danger" disabled>● Event (manual)</button>
+
+        <label class="slider">
+          Animal sensitivity <span id="sensitivityVal">50%</span>
+          <input id="sensitivity" type="range" min="0" max="100" value="50" />
+        </label>
+      </div>
+
+      <div class="pills">
+        <span id="rawPill" class="pill">raw: —</span>
+        <span id="audioPill" class="pill">audio: —</span>
+        <span id="wakePill" class="pill">wake-lock: none</span>
+        <span id="deterrentPill" class="pill">deterrent: ready</span>
+        <span id="incidentCount" class="pill">incidents: 0</span>
+      </div>
+
+      <p id="status" class="status">Idle.</p>
+    </section>
+
+    <section id="playback" class="playback" hidden>
+      <h2>Blurred recording</h2>
+      <video id="playbackVideo" controls playsinline></video>
+      <a id="downloadLink" class="btn" download>Download blurred file</a>
+    </section>
+
+    <section class="scope-note">
+      <h2>What this PoC does <em>not</em> do</h2>
+      <p>
+        This is a <strong>throwaway demo</strong> to validate the core loop, not the shippable
+        product. It deliberately does <strong>not</strong> provide:
+      </p>
+      <ul>
+        <li><strong>Encryption at rest</strong> — no Secure-Enclave / Keystore key storage.</li>
+        <li><strong>Always-on / background recording</strong> — browsers suspend hidden tabs; the
+          screen wake lock is best-effort and can be released by the OS.</li>
+        <li><strong>Sealed raw evidence</strong> — the encrypted raw pre-roll ring buffer and
+          authorized unseal are stubbed. Here, capture is raw but blur is applied on the canvas
+          before display/recording; the raw feed is never persisted.</li>
+        <li><strong>Jurisdiction enforcement</strong> — the Policy Engine is an injectable stub and
+          does not resolve or enforce real law.</li>
+      </ul>
+      <p class="fine">
+        These guarantees are <strong>native-only</strong> (iOS Vision/CryptoKit, Android ML
+        Kit/Keystore). The animal deterrent <strong>may help avoid, definitely helps document</strong>
+        — it is not a safety guarantee.
+      </p>
+    </section>
+  </main>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
