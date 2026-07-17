@@ -50,10 +50,11 @@ let running = false;
 let rafId = 0;
 let frameCount = 0;
 let lastFrameTs = 0;
-let lastFaceResult = { boxes: [], maxScore: 0 };
+let lastFaceResult = { boxes: [], maxScore: 0, ok: false };
 let lastAnimals = [];
 
 ui.onSensitivity((v) => animalDeterrent.setSensitivity(v));
+ui.setVersion(CONFIG.version);
 ui.setStatus('Idle. Press Start to request camera + mic.');
 ui.showProfile(policy.getProfile());
 
@@ -209,6 +210,11 @@ function loop() {
     animals: lastAnimals,
     overBlurred: blurInfo.overBlurred,
     approach,
+  });
+  ui.setDetectorStatus({
+    ok: lastFaceResult.ok,
+    faces: lastFaceResult.boxes.length,
+    overBlurred: blurInfo.overBlurred,
   });
   ui.updateFps(dt);
   ui.setWake(session.hasWakeLock());

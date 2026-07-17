@@ -33,6 +33,10 @@ body {
   font-size: 11px; font-weight: 600; color: var(--muted);
   border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; margin-left: 6px;
 }
+.brand .version {
+  font-size: 11px; font-weight: 700; color: #60a5fa; margin-left: 6px;
+  font-variant-numeric: tabular-nums;
+}
 .profile-banner {
   font-size: 12px; color: var(--muted); text-align: right;
   max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

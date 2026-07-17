@@ -63,8 +63,12 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
 
 await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'load' });
+const versionText = await page.evaluate(() => document.getElementById('version').textContent);
 await page.click('#startBtn');
 await page.waitForTimeout(3000);
+// With a face detected and the detector healthy, we must be in FACES-ONLY mode,
+// i.e. NOT whole-frame over-blur.
+const detStatus = await page.evaluate(() => document.getElementById('detPill').textContent);
 await page.click('#eventBtn');          // flag a manual incident
 await page.waitForTimeout(2500);
 await page.click('#stopBtn');
@@ -89,6 +93,8 @@ const afterUnseal = await page.evaluate(() => ({
   auditHasUnseal: [...document.querySelectorAll('#auditList .a-type')].some(e => e.textContent === 'raw-unseal'),
 }));
 
+console.log('VERSION', versionText);
+console.log('DET_STATUS', detStatus);
 console.log('AFTER_STOP', JSON.stringify(afterStop, null, 2));
 console.log('AFTER_UNSEAL', JSON.stringify(afterUnseal, null, 2));
 console.log('ERRORS', JSON.stringify(errors, null, 2));
@@ -96,7 +102,10 @@ console.log('ERRORS', JSON.stringify(errors, null, 2));
 await browser.close();
 server.close();
 
+const facesOnly = /faces\s*1/.test(detStatus) && !/over-blur/.test(detStatus);
 const ok =
+  /^v\d/.test(versionText) &&
+  facesOnly &&
   afterStop.blurredHidden === false &&
   afterStop.evidenceHidden === false &&
   afterStop.segmentCount >= 1 &&

@@ -23,8 +23,8 @@ export class FaceBlur {
     // Reusable offscreen buffer for the downscale step of the mosaic.
     this.tmp = document.createElement('canvas');
     this.tmpCtx = this.tmp.getContext('2d');
-    this._lastConfidentAtMs = 0;
-    this._everDetected = false;
+    this._lastHealthyAtMs = 0;   // last time the detector returned successfully
+    this._everHealthy = false;   // detector has produced at least one successful call
   }
 
   resize(w, h) {
@@ -74,25 +74,26 @@ export class FaceBlur {
     ctx.drawImage(video, 0, 0, w, h);
 
     const boxes = (faceResult && faceResult.boxes) || [];
-    const maxScore = (faceResult && faceResult.maxScore) || 0;
-    const confident = boxes.length > 0 && maxScore >= CONFIG.detection.faceMinConfidence;
-
-    if (confident) {
-      this._lastConfidentAtMs = nowMs;
-      this._everDetected = true;
+    // Detector "health" = the call succeeded (found faces OR a clean zero). Only a
+    // stalled/errored detector triggers whole-frame over-blur; a healthy "no face
+    // in view" blurs nothing (there is no face to leak).
+    const detectorOk = !!(faceResult && faceResult.ok);
+    if (detectorOk) {
+      this._lastHealthyAtMs = nowMs;
+      this._everHealthy = true;
     }
 
-    // 2) Fail-safe: pixelate the whole frame if the detector has produced nothing
-    //    yet this session, or has gone stale.
-    const stale = nowMs - this._lastConfidentAtMs > b.stallOverblurMs;
-    const overBlur = !this._everDetected || stale;
+    // 2) Fail-safe: pixelate the whole frame only when the detector is unhealthy —
+    //    never ran successfully yet, or hasn't responded within the stall window.
+    const stalled = nowMs - this._lastHealthyAtMs > b.stallOverblurMs;
+    const overBlur = !this._everHealthy || stalled;
 
     if (overBlur) {
       this._pixelateRegion(0, 0, w, h, b.mosaicBlocksFullFrame);
       return { overBlurred: true, blurredCount: boxes.length };
     }
 
-    // 3) Normal path: pixelate each padded face region.
+    // 3) Normal path: pixelate each padded face region (nothing if no faces).
     let count = 0;
     for (const box of boxes) {
       const padX = box.w * b.facePaddingPct;
@@ -111,7 +112,7 @@ export class FaceBlur {
   }
 
   reset() {
-    this._lastConfidentAtMs = 0;
-    this._everDetected = false;
+    this._lastHealthyAtMs = 0;
+    this._everHealthy = false;
   }
 }

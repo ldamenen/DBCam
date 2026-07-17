@@ -23,6 +23,8 @@ export class UI {
       rawPill: document.getElementById('rawPill'),
       deterrentPill: document.getElementById('deterrentPill'),
       incidentCount: document.getElementById('incidentCount'),
+      detPill: document.getElementById('detPill'),
+      version: document.getElementById('version'),
       playback: document.getElementById('playback'),
       playbackVideo: document.getElementById('playbackVideo'),
       downloadLink: document.getElementById('downloadLink'),
@@ -60,6 +62,17 @@ export class UI {
   }
 
   setStatus(text) { this.el.status.textContent = text; }
+
+  setVersion(v) { if (this.el.version) this.el.version.textContent = v; }
+
+  /** Live detector readout: face count + whether the fail-safe over-blur is active. */
+  setDetectorStatus({ ok, faces, overBlurred }) {
+    let txt;
+    if (overBlurred) txt = ok ? `detector: ok · over-blur (no face)` : 'detector: STALLED · over-blur';
+    else txt = `detector: ok · faces ${faces}`;
+    this.el.detPill.textContent = txt;
+    this.el.detPill.style.color = overBlurred && !ok ? 'var(--danger)' : '';
+  }
 
   showProfile(profile) {
     this.el.profileBanner.textContent =

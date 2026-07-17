@@ -29,15 +29,17 @@ export class Detection {
     );
     const fileset = await FilesetResolver.forVisionTasks(WASM_URL);
 
-    // GPU delegate where available; MediaPipe falls back to CPU automatically.
+    // CPU (XNNPACK) delegate by default — reliable on iOS Safari, where the WebGL
+    // GPU delegate is flaky. Configurable via CONFIG.detection.delegate.
+    const delegate = CONFIG.detection.delegate || 'CPU';
     [this.faceDetector, this.objectDetector] = await Promise.all([
       FaceDetector.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: CONFIG.detection.faceModelUrl, delegate: 'GPU' },
+        baseOptions: { modelAssetPath: CONFIG.detection.faceModelUrl, delegate },
         runningMode: 'VIDEO',
-        minDetectionConfidence: 0.3, // keep low; we apply our own thresholds/over-blur
+        minDetectionConfidence: 0.25, // keep low; we apply our own thresholds
       }),
       ObjectDetector.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: CONFIG.detection.objectModelUrl, delegate: 'GPU' },
+        baseOptions: { modelAssetPath: CONFIG.detection.objectModelUrl, delegate },
         runningMode: 'VIDEO',
         scoreThreshold: 0.25,
         maxResults: 10,
@@ -56,17 +58,20 @@ export class Detection {
   }
 
   /**
-   * @returns {{boxes: Array<{x,y,w,h,score}>, maxScore: number}}
-   * Boxes are in source-video pixel coordinates.
+   * @returns {{boxes: Array<{x,y,w,h,score}>, maxScore: number, ok: boolean}}
+   * Boxes are in source-video pixel coordinates. `ok` is true when the detector
+   * call succeeded (even if it found zero faces) — the fail-safe uses it to tell
+   * "detector stalled/errored" (over-blur everything) apart from "no face in view".
    */
   detectFaces(video, tsMs) {
-    if (!this.ready) return { boxes: [], maxScore: 0 };
+    if (!this.ready) return { boxes: [], maxScore: 0, ok: false };
     const ts = this._nextTs(tsMs);
     let res;
     try {
       res = this.faceDetector.detectForVideo(video, ts);
-    } catch (_e) {
-      return { boxes: [], maxScore: 0 };
+    } catch (e) {
+      if (!this._warnedFace) { console.warn('face detectForVideo failed:', e); this._warnedFace = true; }
+      return { boxes: [], maxScore: 0, ok: false };
     }
     const boxes = [];
     let maxScore = 0;
@@ -77,7 +82,7 @@ export class Detection {
       maxScore = Math.max(maxScore, score);
       boxes.push({ x: bb.originX, y: bb.originY, w: bb.width, h: bb.height, score });
     }
-    return { boxes, maxScore };
+    return { boxes, maxScore, ok: true };
   }
 
   /**

@@ -4,6 +4,9 @@
 // are gathered in one place so the demo is easy to tweak while presenting.
 
 export const CONFIG = {
+  // Bump on every deploy so the header shows which build is loaded (cache check).
+  version: 'v0.5.0',
+
   capture: {
     // Target capture constraints. Native target is 1080p30 (§4 real-time budget);
     // the browser will negotiate the closest it can and we adapt to what we get.
@@ -19,8 +22,11 @@ export const CONFIG = {
     // boxes, so throttling detection protects framerate without leaking faces.
     faceEveryN: 1,
     animalEveryN: 2,
-    faceMinConfidence: 0.5,   // below this => treat as "uncertain" => over-blur
+    faceMinConfidence: 0.5,   // faces below this are still blurred, just flagged low-conf
     animalMinConfidence: 0.4,
+    // MediaPipe inference delegate. 'CPU' (XNNPACK) is reliable on iOS Safari; 'GPU'
+    // (WebGL) is faster on desktop but flaky on iOS. CPU is the safe default here.
+    delegate: 'CPU',
     // MediaPipe model + wasm locations (loaded from CDN when served online).
     tasksVisionVersion: '0.10.14',
     faceModelUrl:
@@ -38,8 +44,10 @@ export const CONFIG = {
     mosaicBlocksFace: 8,         // ~blocks across the larger side of a face region
     mosaicBlocksLowConf: 6,      // stronger (fewer blocks) when confidence is low
     mosaicBlocksFullFrame: 20,   // whole-frame fail-safe pixelation
-    // If no fresh, confident face result within this many ms, over-blur the WHOLE frame.
-    stallOverblurMs: 350,
+    // Whole-frame over-blur triggers only when the DETECTOR itself stalls/errors
+    // (no successful detector call within this window) — NOT when it healthily
+    // reports zero faces. A healthy "no face in view" blurs nothing.
+    stallOverblurMs: 900,
   },
 
   animals: {
