@@ -35,11 +35,15 @@ export class AnimalDeterrent {
 
   /**
    * @param {Array<{x,y,w,h,score,label}>} animals detections in frame pixels
+   * @param {number} frameW
+   * @param {number} frameH
+   * @param {number} nowMs
+   * @param {number} [audioLevel=0] aggressive-sound level 0..1 (audioMonitor.js)
    * @returns {{hostile:boolean, threatScore:number, animal:Object|null,
    *            areaFrac:number, growthPerSec:number, agitation:number,
-   *            centered:boolean, reasons:string[]}}
+   *            audioLevel:number, centered:boolean, reasons:string[]}}
    */
-  update(animals, frameW, frameH, nowMs) {
+  update(animals, frameW, frameH, nowMs, audioLevel = 0) {
     const frameArea = frameW * frameH || 1;
     const T = CONFIG.animals.threat;
 
@@ -54,7 +58,7 @@ export class AnimalDeterrent {
     if (!biggest) {
       this._history.length = 0;
       return { hostile: false, threatScore: 0, animal: null, areaFrac: 0,
-        growthPerSec: 0, agitation: 0, centered: false, reasons: [] };
+        growthPerSec: 0, agitation: 0, audioLevel, centered: false, reasons: [] };
     }
 
     const areaFrac = biggestArea / frameArea;
@@ -94,11 +98,13 @@ export class AnimalDeterrent {
     const proximityTerm = clamp01(areaFrac / T.areaRef);
     const approachTerm = clamp01(Math.max(0, growthPerSec) / T.growthRef);
     const agitationTerm = clamp01(agitation / T.agitationRef);
+    const audioTerm = clamp01(audioLevel);
 
     let score =
       T.weights.proximity * proximityTerm +
       T.weights.approach * approachTerm +
-      T.weights.agitation * agitationTerm;
+      T.weights.agitation * agitationTerm +
+      T.weights.audio * audioTerm;
 
     // Off-center animals are less of a direct threat: fade the score out.
     if (!centered) score *= 0.5;
@@ -110,10 +116,11 @@ export class AnimalDeterrent {
     if (proximityTerm > 0.5) reasons.push('very close');
     if (approachTerm > 0.5) reasons.push('lunging');
     if (agitationTerm > 0.5) reasons.push('agitated');
+    if (audioTerm > T.audioReasonAt) reasons.push('barking/loud');
     if (centered) reasons.push('aimed at you');
 
     return { hostile, threatScore: score, animal: biggest, areaFrac,
-      growthPerSec, agitation, centered, reasons };
+      growthPerSec, agitation, audioLevel: audioTerm, centered, reasons };
   }
 
   reset() {

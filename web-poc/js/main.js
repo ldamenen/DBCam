@@ -20,6 +20,7 @@ import { FaceBlur } from './faceBlur.js';
 import { AnimalDeterrent } from './animalDeterrent.js';
 import { DeterrentSound } from './deterrentSound.js';
 import { VoiceTrigger } from './voiceTrigger.js';
+import { AudioMonitor } from './audioMonitor.js';
 import { IncidentDetector } from './incidentDetector.js';
 import { Recorder } from './recorder.js';
 import { EvidenceStore } from './evidenceStore.js';
@@ -34,6 +35,7 @@ const auditLog = new AuditLog();
 const policy = new PolicyEngine(); // injectable stub; swap for GPS/manual resolver in Phase 7
 const deterrentSound = new DeterrentSound();
 const animalDeterrent = new AnimalDeterrent();
+const audioMonitor = new AudioMonitor();
 const voice = new VoiceTrigger();
 const VOICE_LS = 'dbcam.voice';
 
@@ -177,6 +179,8 @@ async function start() {
   }
 
   animalDeterrent.reset();
+  // Aggressive-sound detector taps the mic (only when the policy allows audio).
+  audioMonitor.start(profile.audioEnabled ? capture.getAudioTrack() : null);
 
   running = true;
   applyVoice(); // begin listening for the trigger word if enabled
@@ -219,11 +223,14 @@ function loop() {
   // --- Blur render (fail-safe) -> visible canvas ---
   const blurInfo = faceBlur.render(video, lastFaceResult, now);
 
-  // --- Animal threat -> deterrent + early incident sealing ---
-  const threat = animalDeterrent.update(lastAnimals, capture.width, capture.height, now);
+  // --- Animal threat (vision + sound) -> deterrent + early incident sealing ---
+  const audioLevel = audioMonitor.getLevel(now);
+  ui.setSoundLevel(audioLevel);
+  const threat = animalDeterrent.update(lastAnimals, capture.width, capture.height, now, audioLevel);
   if (threat.hostile) {
     if (deterrentSound.canPlay(now)) {
       deterrentSound.play(now);
+      audioMonitor.notifyDeterrent(now); // don't let our own alarm self-trigger
       auditLog.append('deterrent-fired', { label: threat.animal.label, threat: Number(threat.threatScore.toFixed(2)) }, now);
     }
     // Early trigger: seal the buildup before contact (§2.2).
@@ -268,6 +275,7 @@ async function stop() {
   const stopMs = performance.now();
   voice.stop();
   applyVoice(); // reset voice status to ready/off now that we're idle
+  audioMonitor.stop();
   if (incident) incident.finalize(stopMs);
 
   let blurredResult = null;

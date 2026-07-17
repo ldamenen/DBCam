@@ -24,6 +24,7 @@ export class UI {
       deterrentPill: document.getElementById('deterrentPill'),
       incidentCount: document.getElementById('incidentCount'),
       detPill: document.getElementById('detPill'),
+      soundPill: document.getElementById('soundPill'),
       version: document.getElementById('version'),
       sessionState: document.getElementById('sessionState'),
       recTimer: document.getElementById('recTimer'),
@@ -122,6 +123,11 @@ export class UI {
 
   setWake(on) { this.el.wakePill.textContent = `wake-lock: ${on ? 'held' : 'none'}`; }
   setDeterrent(text) { this.el.deterrentPill.textContent = text; }
+  setSoundLevel(level) {
+    const pct = Math.round(level * 100);
+    this.el.soundPill.textContent = `sound: ${pct}%`;
+    this.el.soundPill.style.color = level > 0.45 ? 'var(--danger)' : '';
+  }
   setIncidentCount(n) { this.el.incidentCount.textContent = `incidents: ${n}`; }
 
   sizeCanvases(w, h) {

@@ -5,7 +5,7 @@
 
 export const CONFIG = {
   // Bump on every deploy so the header shows which build is loaded (cache check).
-  version: 'v0.7.0',
+  version: 'v0.8.0',
 
   capture: {
     // Target capture constraints. Native target is 1080p30 (§4 real-time budget);
@@ -63,9 +63,24 @@ export const CONFIG = {
       growthRef: 0.06,         // growthPerSec (areaFrac/s) reading as a fast lunge
       agitationRef: 0.85,      // lateral speed (frame-fracs/s) reading as very agitated
       centerToleranceFrac: 0.36, // within this of center = aimed at the wearer
-      weights: { proximity: 0.4, approach: 0.4, agitation: 0.2 },
-      triggerScore: 0.6,       // base threshold (at sensitivity 0.5)
+      // Four behaviour cues combined into the threat score. `audio` is a loud
+      // low-frequency sound spike (bark/growl proxy) from the mic (audioMonitor.js).
+      weights: { proximity: 0.32, approach: 0.28, agitation: 0.14, audio: 0.26 },
+      audioReasonAt: 0.45,     // audio term above this adds a "barking/loud" reason
+      triggerScore: 0.5,       // base threshold (at sensitivity 0.5)
     },
+  },
+
+  audio: {
+    // Loud low-frequency spike detector (bark/growl proxy). Not a sound classifier —
+    // detects loud + low-band + sudden noise. Native would use an on-device model.
+    fftSize: 1024,
+    lowBandHz: [90, 1200],       // band where barks/growls carry energy
+    minLoud: 0.05,               // RMS floor; below this = treat as silence
+    spikeMult: 1.5,              // current loudness must exceed baseline * this
+    baselineEma: 0.02,           // slow adaptation of the ambient noise floor
+    levelEma: 0.45,              // fast smoothing of the output level
+    suppressAfterDeterrentMs: 1600, // ignore audio right after our own alarm blasts
   },
 
   voice: {
