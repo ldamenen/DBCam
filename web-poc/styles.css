@@ -204,6 +204,20 @@ body.running .record.stop { display: grid; }
 .slider input[type="range"] { width: 100%; accent-color: var(--accent); }
 .diag-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 
+.setting-block { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.switch-row { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; }
+.switch-row input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--accent); }
+.switch-row span:nth-of-type(1) { flex: 1; }
+.chip.mini { font-size: 11px; padding: 3px 9px; }
+.chip.mini.hit { color: #062; background: var(--ok); border-color: transparent; }
+.text-input {
+  margin-top: 10px; width: 100%; font-size: 15px; color: var(--text);
+  background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 10px;
+  padding: 10px 12px; -webkit-appearance: none; appearance: none;
+}
+.text-input:focus { outline: none; border-color: var(--accent); }
+.sheet-body .fine { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+
 /* ===== Review ===== */
 .review-header { margin-top: 26px; scroll-margin-top: 76px; }
 .review-card { scroll-margin-top: 76px; }

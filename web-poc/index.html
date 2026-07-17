@@ -88,9 +88,22 @@
       <summary>Settings &amp; diagnostics</summary>
       <div class="sheet-body">
         <label class="slider">
-          <span class="slider-label">Animal deterrent sensitivity <span id="sensitivityVal">50%</span></span>
+          <span class="slider-label">Animal threat sensitivity <span id="sensitivityVal">50%</span></span>
           <input id="sensitivity" type="range" min="0" max="100" value="50" />
         </label>
+
+        <div class="setting-block">
+          <label class="switch-row">
+            <input type="checkbox" id="voiceEnable" />
+            <span>Voice trigger word</span>
+            <span id="voiceStatus" class="chip mini">voice: off</span>
+          </label>
+          <input id="voiceWord" class="text-input" type="text" inputmode="text"
+                 autocapitalize="none" autocomplete="off" placeholder="e.g. help" value="help" />
+          <p class="fine">Speak this word to flag an incident hands-free. Uses the browser
+             speech API — on iOS it needs a separate permission and sends audio to Apple.</p>
+        </div>
+
         <div class="diag-row">
           <span id="detPill" class="chip">detector: —</span>
           <span id="deterrentPill" class="chip">deterrent: ready</span>

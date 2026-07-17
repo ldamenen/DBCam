@@ -19,6 +19,7 @@ import { Detection } from './detection.js';
 import { FaceBlur } from './faceBlur.js';
 import { AnimalDeterrent } from './animalDeterrent.js';
 import { DeterrentSound } from './deterrentSound.js';
+import { VoiceTrigger } from './voiceTrigger.js';
 import { IncidentDetector } from './incidentDetector.js';
 import { Recorder } from './recorder.js';
 import { EvidenceStore } from './evidenceStore.js';
@@ -33,6 +34,8 @@ const auditLog = new AuditLog();
 const policy = new PolicyEngine(); // injectable stub; swap for GPS/manual resolver in Phase 7
 const deterrentSound = new DeterrentSound();
 const animalDeterrent = new AnimalDeterrent();
+const voice = new VoiceTrigger();
+const VOICE_LS = 'dbcam.voice';
 
 // Per-session objects (recreated on Start).
 let capture = null;
@@ -58,6 +61,32 @@ ui.onSensitivity((v) => animalDeterrent.setSensitivity(v));
 ui.setVersion(CONFIG.version);
 ui.setStatus('Idle. Press Start to request camera + mic.');
 ui.showProfile(policy.getProfile());
+
+// Restore voice-trigger settings and reflect availability.
+try { ui.setVoiceConfig(JSON.parse(localStorage.getItem(VOICE_LS) || '{}')); } catch (_e) {}
+ui.onVoiceChange(() => applyVoice());
+applyVoice(); // sets initial status (off / ready / unsupported)
+
+/** Start/stop/refresh the voice keyword listener based on settings + session state. */
+function applyVoice() {
+  const cfg = ui.getVoiceConfig();
+  try { localStorage.setItem(VOICE_LS, JSON.stringify(cfg)); } catch (_e) {}
+
+  if (!VoiceTrigger.isSupported()) { ui.setVoiceStatus('unsupported'); return; }
+  voice.stop();
+  if (running && cfg.enabled && cfg.word) {
+    voice.start(cfg.word, {
+      onTrigger: () => {
+        if (!running || !incident) return;
+        incident.trigger('voice', performance.now());
+        ui.flashVoiceHeard();
+      },
+      onStatus: (s) => ui.setVoiceStatus(s),
+    });
+  } else {
+    ui.setVoiceStatus(cfg.enabled ? (running ? 'starting…' : 'ready') : 'off');
+  }
+}
 
 ui.onStart(async () => {
   try {
@@ -150,6 +179,7 @@ async function start() {
   animalDeterrent.reset();
 
   running = true;
+  applyVoice(); // begin listening for the trigger word if enabled
   frameCount = 0;
   lastFrameTs = performance.now();
   const rawNote = rawRecorder ? 'raw sealed in background' : 'blur-at-capture (no raw)';
@@ -189,17 +219,18 @@ function loop() {
   // --- Blur render (fail-safe) -> visible canvas ---
   const blurInfo = faceBlur.render(video, lastFaceResult, now);
 
-  // --- Animal approach -> deterrent + early incident sealing ---
-  const approach = animalDeterrent.update(lastAnimals, capture.width, capture.height, now);
-  if (approach.approaching) {
+  // --- Animal threat -> deterrent + early incident sealing ---
+  const threat = animalDeterrent.update(lastAnimals, capture.width, capture.height, now);
+  if (threat.hostile) {
     if (deterrentSound.canPlay(now)) {
       deterrentSound.play(now);
-      auditLog.append('deterrent-fired', { label: approach.animal.label }, now);
+      auditLog.append('deterrent-fired', { label: threat.animal.label, threat: Number(threat.threatScore.toFixed(2)) }, now);
     }
     // Early trigger: seal the buildup before contact (§2.2).
-    incident.trigger('animal-approach', now, {
-      label: approach.animal.label,
-      areaFrac: Number(approach.areaFrac.toFixed(3)),
+    incident.trigger('hostile-animal', now, {
+      label: threat.animal.label,
+      threatScore: Number(threat.threatScore.toFixed(2)),
+      reasons: threat.reasons,
     });
   }
   const cd = deterrentSound.cooldownRemainingMs(now);
@@ -214,7 +245,7 @@ function loop() {
     faces: lastFaceResult.boxes,
     animals: lastAnimals,
     overBlurred: blurInfo.overBlurred,
-    approach,
+    threat,
   });
   ui.setDetectorStatus({
     ok: lastFaceResult.ok,
@@ -235,6 +266,8 @@ async function stop() {
   ui.setStatus('Finalizing recordings…');
 
   const stopMs = performance.now();
+  voice.stop();
+  applyVoice(); // reset voice status to ready/off now that we're idle
   if (incident) incident.finalize(stopMs);
 
   let blurredResult = null;

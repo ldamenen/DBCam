@@ -28,6 +28,9 @@ export class UI {
       sessionState: document.getElementById('sessionState'),
       recTimer: document.getElementById('recTimer'),
       reviewHeader: document.getElementById('reviewHeader'),
+      voiceEnable: document.getElementById('voiceEnable'),
+      voiceWord: document.getElementById('voiceWord'),
+      voiceStatus: document.getElementById('voiceStatus'),
       playback: document.getElementById('playback'),
       playbackVideo: document.getElementById('playbackVideo'),
       downloadLink: document.getElementById('downloadLink'),
@@ -82,6 +85,25 @@ export class UI {
     this.el.recTimer.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   }
 
+  // --- Voice trigger controls ---
+  onVoiceChange(fn) {
+    const emit = () => fn(this.getVoiceConfig());
+    this.el.voiceEnable.addEventListener('change', emit);
+    this.el.voiceWord.addEventListener('change', emit);
+  }
+  getVoiceConfig() {
+    return { enabled: this.el.voiceEnable.checked, word: this.el.voiceWord.value.trim() };
+  }
+  setVoiceConfig({ enabled, word }) {
+    if (typeof enabled === 'boolean') this.el.voiceEnable.checked = enabled;
+    if (typeof word === 'string' && word) this.el.voiceWord.value = word;
+  }
+  setVoiceStatus(text) { this.el.voiceStatus.textContent = `voice: ${text}`; }
+  flashVoiceHeard() {
+    this.el.voiceStatus.classList.add('hit');
+    setTimeout(() => this.el.voiceStatus.classList.remove('hit'), 1200);
+  }
+
   /** Live detector readout: face count + whether the fail-safe over-blur is active. */
   setDetectorStatus({ ok, faces, overBlurred }) {
     let txt;
@@ -127,7 +149,7 @@ export class UI {
   }
 
   /** Draw debug detection boxes on the overlay (does not affect the recording). */
-  drawOverlay({ faces = [], animals = [], overBlurred = false, approach = null }) {
+  drawOverlay({ faces = [], animals = [], overBlurred = false, threat = null }) {
     const ctx = this.overlayCtx;
     const w = this.el.overlay.width;
     const h = this.el.overlay.height;
@@ -144,13 +166,22 @@ export class UI {
       ctx.fillText(`face ${(f.score * 100).toFixed(0)}%`, f.x + 3, f.y + 3);
     }
 
-    // Animals (orange, red if approaching).
+    // Animals. The primary subject shows a threat meter; red when hostile.
     for (const a of animals) {
-      const isThreat = approach && approach.animal === a && approach.approaching;
-      ctx.strokeStyle = isThreat ? 'rgba(255,60,60,0.95)' : 'rgba(255,170,40,0.9)';
+      const isSubject = threat && threat.animal === a;
+      const hostile = isSubject && threat.hostile;
+      ctx.strokeStyle = hostile ? 'rgba(255,60,60,0.98)' : 'rgba(255,170,40,0.9)';
       ctx.fillStyle = ctx.strokeStyle;
+      ctx.lineWidth = hostile ? Math.max(3, w / 260) : Math.max(2, w / 400);
       ctx.strokeRect(a.x, a.y, a.w, a.h);
-      ctx.fillText(`${a.label} ${(a.score * 100).toFixed(0)}%`, a.x + 3, a.y + 3);
+      let label = `${a.label} ${(a.score * 100).toFixed(0)}%`;
+      if (isSubject) {
+        const pct = Math.round(threat.threatScore * 100);
+        label = hostile
+          ? `⚠ THREAT ${pct}% · ${threat.reasons.join(', ') || 'hostile'}`
+          : `${a.label} · threat ${pct}%`;
+      }
+      ctx.fillText(label, a.x + 3, a.y + 3);
     }
 
     if (overBlurred) {

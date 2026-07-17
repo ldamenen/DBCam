@@ -46,9 +46,19 @@ python3 -m http.server 8000
 
 Press **Start session**, grant camera (+ mic if the active profile allows it), and
 you should see the **blurred** (pixelated) preview. Detection boxes, an FPS counter,
-and status pills show what the pipeline is doing. The **Event** button and an
-approaching animal both flag an incident; an approaching animal also triggers the
-audible deterrent (with a cooldown).
+and status pills show what the pipeline is doing.
+
+**Ways to flag an incident:**
+- **Event button** — manual hard override.
+- **Voice trigger word** (Settings & diagnostics) — speak a word you set (default
+  "help") to flag hands-free. Web Speech API only; on iOS Safari it needs a separate
+  permission and routes audio to Apple's servers, and it can pause/restart — so it's
+  PoC-grade. Native would use on-device wake-word spotting.
+- **Hostile animal** — a **threat score** combining proximity, lunge speed (box-area
+  growth) and agitation (erratic movement), only firing when it reads as hostile.
+  This is behaviour-based inference, **not** aggression/emotion recognition (a generic
+  detector only sees a box + label). A hostile animal also triggers the audible
+  deterrent (with a cooldown); the Settings slider tunes threat sensitivity.
 
 Press **Stop** to get the review:
 - **Blurred recording** — the privacy-safe default, freely playable/downloadable.
@@ -73,9 +83,10 @@ reads the same across the web PoC and the future iOS/Android apps:
 | `captureLayer.js` | Capture Layer | Camera opened **once**; single source of truth. |
 | `detection.js` | Face/Animal detect | MediaPipe Tasks (same family as Android ML Kit; mirrors iOS Vision). |
 | `faceBlur.js` | Face Detect + Blur | **Fail-safe over-blur** on stale/low-confidence detection. |
-| `animalDeterrent.js` | Animal Deterrent Detector | Approach = box large + growing + centered. |
+| `animalDeterrent.js` | Animal Deterrent Detector | **Threat score** = proximity + lunge speed + agitation; behaviour-based, not aggression recognition. |
 | `deterrentSound.js` | (deterrent output) | Web Audio alarm, cooldown, sensitivity. |
-| `incidentDetector.js` | Incident Detector | Manual button + animal approach; tracks each incident's start/end window (audio/IMU = native). |
+| `voiceTrigger.js` | Incident Detector (audio) | Web Speech API keyword listener → incident (PoC-grade; native = on-device wake-word). |
+| `incidentDetector.js` | Incident Detector | Manual button + voice word + hostile animal; tracks each incident's start/end window (IMU = native). |
 | `recorder.js` | Encrypted Store (both layers) | Records the **blurred canvas** (default) and, in parallel, the **raw camera feed** (sealed). |
 | `evidenceStore.js` | Evidence Sealer + Store | Builds sealed segments (with pre-roll) from incidents; gates authorized unseal. |
 | `sessionController.js` | Session Controller | Screen Wake Lock + interruption **gap markers**. |

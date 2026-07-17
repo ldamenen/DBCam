@@ -5,7 +5,7 @@
 
 export const CONFIG = {
   // Bump on every deploy so the header shows which build is loaded (cache check).
-  version: 'v0.6.0',
+  version: 'v0.7.0',
 
   capture: {
     // Target capture constraints. Native target is 1080p30 (§4 real-time budget);
@@ -51,15 +51,29 @@ export const CONFIG = {
   },
 
   animals: {
-    // Approach estimation: an animal is "approaching" when its box is large,
-    // growing, and roughly centered on the wearer.
     classes: ['dog', 'cat', 'bear', 'horse', 'sheep', 'cow', 'elephant', 'zebra', 'giraffe', 'bird'],
-    approachAreaFrac: 0.06,    // box area must exceed this fraction of the frame
-    approachGrowthFrac: 0.015, // and be growing by at least this much area-frac/sec
-    centerToleranceFrac: 0.30, // box center within this fraction of frame center
-    historyMs: 1200,           // window used to estimate growth
-    // Sensitivity slider maps 0..1 onto a multiplier applied to the thresholds.
-    defaultSensitivity: 0.5,
+    historyMs: 1500,           // window used to estimate motion
+    defaultSensitivity: 0.5,   // slider 0..1 scales the trigger threshold
+    // THREAT estimation. A generic detector can't read aggression, so "hostile" is
+    // inferred from behaviour: how close (proximity), how fast it's lunging toward
+    // the wearer (approach), and how agitated/erratic the movement is (agitation).
+    // Each term is normalized against a reference value, then weighted + combined.
+    threat: {
+      areaRef: 0.16,           // areaFrac that alone reads as "very close"
+      growthRef: 0.06,         // growthPerSec (areaFrac/s) reading as a fast lunge
+      agitationRef: 0.85,      // lateral speed (frame-fracs/s) reading as very agitated
+      centerToleranceFrac: 0.36, // within this of center = aimed at the wearer
+      weights: { proximity: 0.4, approach: 0.4, agitation: 0.2 },
+      triggerScore: 0.6,       // base threshold (at sensitivity 0.5)
+    },
+  },
+
+  voice: {
+    // Voice trigger word (§2.2 manual override, hands-free). Web Speech API only —
+    // on iOS Safari this routes audio to Apple's servers and needs its own permission.
+    defaultWord: 'help',
+    lang: 'en-US',
+    retriggerMs: 4000,         // ignore repeat hits within this window
   },
 
   deterrent: {
