@@ -9,7 +9,21 @@ It exists to prove the concept fast, with zero app-store/install friction. It is
 **not** the shippable product — the evidence-grade guarantees are native-only (see
 [Scope limits](#scope-limits)).
 
-## Run it
+## Live demo (GitHub Pages)
+
+Pushes to `main` auto-deploy this folder to GitHub Pages via
+[`.github/workflows/pages.yml`](../.github/workflows/pages.yml), served over HTTPS at:
+
+> **https://ldamenen.github.io/DBCam/**
+
+That HTTPS URL is what makes the camera work on **iOS Safari** (`getUserMedia`
+requires a secure context). Open it in Safari, tap **Start session**, and allow the
+camera. The workflow enables Pages automatically on its first run — no manual repo
+settings toggle required. (GitHub Pages on a **private** repo requires a paid plan;
+if the deploy is skipped for that reason, use the local `python3 -m http.server`
+route below with a tunnel such as `cloudflared`.)
+
+## Run it locally
 
 `getUserMedia` requires a secure context, so serve over `localhost` or HTTPS
 (opening `index.html` via `file://` will not get camera access). Network access is

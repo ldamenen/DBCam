@@ -1,0 +1,51 @@
+name: Deploy web PoC to GitHub Pages
+
+# Publishes web-poc/ as the site root, so the PoC is reachable at
+#   https://<owner>.github.io/<repo>/
+# over HTTPS — which is required for getUserMedia (camera) to work on iOS Safari.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web-poc/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch: {}
+
+# Least-privilege token scoped to what Pages deployment needs.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one Pages deployment at a time; newer pushes supersede in-flight ones.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # enablement: true turns Pages on via the API on first run, so no manual
+      # Settings -> Pages toggle is needed (turnkey).
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      # Upload only the web-poc folder so index.html sits at the site root.
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web-poc
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
