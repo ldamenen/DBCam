@@ -11,17 +11,26 @@ It exists to prove the concept fast, with zero app-store/install friction. It is
 
 ## Live demo (GitHub Pages)
 
-Pushes to `main` auto-deploy this folder to GitHub Pages via
+Pushes to `main` deploy this folder to GitHub Pages via
 [`.github/workflows/pages.yml`](../.github/workflows/pages.yml), served over HTTPS at:
 
 > **https://ldamenen.github.io/DBCam/**
 
 That HTTPS URL is what makes the camera work on **iOS Safari** (`getUserMedia`
-requires a secure context). Open it in Safari, tap **Start session**, and allow the
-camera. The workflow enables Pages automatically on its first run — no manual repo
-settings toggle required. (GitHub Pages on a **private** repo requires a paid plan;
-if the deploy is skipped for that reason, use the local `python3 -m http.server`
-route below with a tunnel such as `cloudflared`.)
+requires a secure context). Open it in Safari, tap **Start session**, allow the
+camera.
+
+**One-time enablement is required** before the workflow can publish:
+
+- The repo must be able to serve Pages — that means a **public** repo (free), or a
+  **private** repo on a **paid plan** (Pro/Team/Enterprise).
+- Turn Pages on once: **Settings → Pages → Build and deployment → Source:
+  GitHub Actions**. After that, every push to `main` (or a manual re-run of the
+  workflow) deploys automatically.
+
+If you'd rather not use Pages at all, use the local `python3 -m http.server` route
+below with a tunnel such as `cloudflared` — it works regardless of repo visibility
+or plan.
 
 ## Run it locally
 
