@@ -26,9 +26,20 @@ export class UI {
       playback: document.getElementById('playback'),
       playbackVideo: document.getElementById('playbackVideo'),
       downloadLink: document.getElementById('downloadLink'),
+      evidence: document.getElementById('evidence'),
+      segmentList: document.getElementById('segmentList'),
+      prerollLabel: document.getElementById('prerollLabel'),
+      rawPlayerWrap: document.getElementById('rawPlayerWrap'),
+      rawPlayerLabel: document.getElementById('rawPlayerLabel'),
+      rawPlayerClose: document.getElementById('rawPlayerClose'),
+      rawVideo: document.getElementById('rawVideo'),
+      auditSection: document.getElementById('auditSection'),
+      auditList: document.getElementById('auditList'),
     };
     this.overlayCtx = this.el.overlay.getContext('2d');
     this._fpsSamples = [];
+    this._rawClampHandler = null;
+    this.el.rawPlayerClose.addEventListener('click', () => this.closeRawPlayer());
   }
 
   onStart(fn) { this.el.startBtn.addEventListener('click', fn); }
@@ -127,7 +138,123 @@ export class UI {
     this.el.downloadLink.download = `dbcam-blurred-session.${ext}`;
   }
 
+  /**
+   * Render the sealed-evidence review list.
+   * @param {Array} segments from EvidenceStore.buildSegments
+   * @param {Object} opts
+   * @param {boolean} opts.hasRaw whether raw was retained (policy = raw-sealed)
+   * @param {number} opts.prerollSeconds
+   * @param {(segment:Object, rowEl:HTMLElement)=>void} opts.onUnseal
+   */
+  renderEvidence(segments, { hasRaw, prerollSeconds, onUnseal }) {
+    this.el.evidence.hidden = false;
+    this.el.prerollLabel.textContent = String(prerollSeconds);
+    const list = this.el.segmentList;
+    list.innerHTML = '';
+
+    if (!segments.length) {
+      const li = document.createElement('li');
+      li.className = 'segment empty';
+      li.textContent = 'No incidents were flagged this session — nothing to seal.';
+      list.appendChild(li);
+      return;
+    }
+
+    for (const seg of segments) {
+      const li = document.createElement('li');
+      li.className = 'segment';
+      const info = document.createElement('div');
+      info.className = 'segment-info';
+      info.innerHTML =
+        `<span class="seg-idx">Incident ${seg.index}</span>` +
+        `<span class="seg-reason">${seg.reasons.join(', ')}</span>` +
+        `<span class="seg-window">${fmt(seg.startSec)}–${fmt(seg.endSec)}</span>`;
+      li.appendChild(info);
+
+      const btn = document.createElement('button');
+      btn.className = 'btn small';
+      if (!hasRaw) {
+        btn.textContent = 'No raw retained';
+        btn.disabled = true;
+        btn.title = 'Policy profile = blur-at-capture: raw was not recorded.';
+      } else {
+        btn.textContent = '🔒 Authorize & unseal';
+        btn.addEventListener('click', () => onUnseal(seg, li));
+      }
+      li.appendChild(btn);
+      list.appendChild(li);
+    }
+  }
+
+  markSegmentUnsealed(rowEl) {
+    rowEl.classList.add('unsealed');
+    const btn = rowEl.querySelector('button');
+    if (btn) { btn.textContent = '🔓 Unsealed'; btn.disabled = true; }
+  }
+
+  /** Play the raw recording clamped to [startSec, endSec]. */
+  playRawWindow(url, startSec, endSec, label) {
+    this.el.rawPlayerWrap.hidden = false;
+    this.el.rawPlayerLabel.textContent = label || 'Unsealed segment';
+    const v = this.el.rawVideo;
+    if (this._rawClampHandler) v.removeEventListener('timeupdate', this._rawClampHandler);
+
+    const seekAndPlay = () => {
+      try { v.currentTime = startSec; } catch (_e) {}
+      v.play().catch(() => {});
+    };
+    if (v.src !== url) {
+      v.src = url;
+      v.addEventListener('loadedmetadata', seekAndPlay, { once: true });
+    } else {
+      seekAndPlay();
+    }
+    // Clamp playback to the incident window so the rest of the raw stays sealed.
+    this._rawClampHandler = () => {
+      if (v.currentTime >= endSec) { v.pause(); }
+      if (v.currentTime < startSec - 0.1) { v.currentTime = startSec; }
+    };
+    v.addEventListener('timeupdate', this._rawClampHandler);
+    this.el.rawPlayerWrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  closeRawPlayer() {
+    const v = this.el.rawVideo;
+    v.pause();
+    if (this._rawClampHandler) { v.removeEventListener('timeupdate', this._rawClampHandler); this._rawClampHandler = null; }
+    this.el.rawPlayerWrap.hidden = true;
+  }
+
+  renderAuditLog(entries) {
+    if (!entries || !entries.length) return;
+    this.el.auditSection.hidden = false;
+    const ol = this.el.auditList;
+    ol.innerHTML = '';
+    for (const e of entries) {
+      const li = document.createElement('li');
+      li.className = 'audit-entry';
+      const hashShort = (e.hash || '').slice(0, 10);
+      li.innerHTML =
+        `<span class="a-seq">#${e.seq}</span>` +
+        `<span class="a-type">${e.type}</span>` +
+        `<span class="a-detail">${escapeHtml(JSON.stringify(e.detail))}</span>` +
+        `<span class="a-hash" title="chained hash">${hashShort}…</span>`;
+      ol.appendChild(li);
+    }
+  }
+
   clearOverlay() {
     this.overlayCtx.clearRect(0, 0, this.el.overlay.width, this.el.overlay.height);
   }
+}
+
+function fmt(sec) {
+  const s = Math.max(0, Math.floor(sec));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, '0')}`;
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }

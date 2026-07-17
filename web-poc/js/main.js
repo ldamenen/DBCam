@@ -1,13 +1,16 @@
 // main.js
 // Orchestration — wires every module and runs the single render loop.
 //
-// The loop implements the core PoC contract (§11.3 / §4):
+// The loop implements the core PoC contract (§1, §4, §11.3):
 //   raw frame (captureLayer)                         <- single camera, opened once
 //     -> detect faces + animals (detection/MediaPipe)
-//     -> blur faces onto the visible canvas (faceBlur, fail-safe)   <- preview is BLURRED
+//     -> pixelate faces onto the visible canvas (faceBlur, fail-safe)  <- preview is BLURRED
 //     -> estimate animal approach -> deterrent + early incident
-//     -> record the BLURRED canvas (recorder)
-//   The raw <video> is never shown and never recorded.
+//     -> record the BLURRED canvas (default, freely viewable)
+//   In parallel, when the policy profile is `raw-sealed`, the UNBLURRED camera feed
+//   is recorded continuously ("raw exists but is sealed", §1). It is NEVER shown live;
+//   after Stop, each incident becomes a sealed segment that requires authorized unseal
+//   (Evidence Sealer + Store + Review UI + Audit Log).
 
 import { CONFIG } from './config.js';
 import { PolicyEngine } from './policyEngine.js';
@@ -18,6 +21,7 @@ import { AnimalDeterrent } from './animalDeterrent.js';
 import { DeterrentSound } from './deterrentSound.js';
 import { IncidentDetector } from './incidentDetector.js';
 import { Recorder } from './recorder.js';
+import { EvidenceStore } from './evidenceStore.js';
 import { SessionController } from './sessionController.js';
 import { AuditLog } from './auditLog.js';
 import { UI } from './ui.js';
@@ -36,7 +40,11 @@ let detection = null;
 let faceBlur = null;
 let incident = null;
 let session = null;
-let recorder = null;
+let blurredRecorder = null;
+let rawRecorder = null;
+let evidence = null;
+let recorderStartMs = 0;
+let activeProfile = null;
 
 let running = false;
 let rafId = 0;
@@ -64,6 +72,7 @@ ui.onStop(async () => { await stop(); });
 ui.onEvent(() => {
   if (!running || !incident) return;
   // Manual "Event" button — the non-negotiable hard override into evidence mode.
+  // The preview stays blurred; this seals the raw incident window for later review.
   incident.trigger('manual', performance.now());
 });
 
@@ -73,6 +82,7 @@ async function start() {
 
   // §7: capture behavior is read from the policy profile, not hard-coded.
   const profile = await policy.resolveForSession();
+  activeProfile = profile;
   ui.showProfile(profile);
 
   // Prime the audio context from this user gesture (autoplay policy).
@@ -102,19 +112,42 @@ async function start() {
     },
   });
 
-  // Record the BLURRED canvas; audio track only if the profile allows it.
-  recorder = new Recorder(ui.el.preview);
-  const audioTrack = profile.audioEnabled ? capture.getAudioTrack() : null;
-  recorder.start(audioTrack);
+  evidence = new EvidenceStore({ auditLog });
+  evidence.setRawMode(profile.rawMode);
 
-  // Reset per-session animal/deterrent state.
+  // Reset review UI from any prior session.
+  ui.el.playback.hidden = true;
+  ui.el.evidence.hidden = true;
+  ui.el.auditSection.hidden = true;
+  ui.closeRawPlayer();
+
+  // Recorders. Blurred default = the canvas. Raw sealed evidence = the camera track
+  // itself, recorded only when the policy permits retaining raw (§7).
+  const audioTrack = profile.audioEnabled ? capture.getAudioTrack() : null;
+  blurredRecorder = new Recorder({ canvas: ui.el.preview });
+  rawRecorder = null;
+  if (profile.rawMode === 'raw-sealed') {
+    const rawVideoTrack = capture.stream.getVideoTracks()[0];
+    rawRecorder = new Recorder({ stream: new MediaStream([rawVideoTrack]) });
+  }
+
+  // Audio goes to the sealed evidence when raw is retained (voices are sensitive);
+  // otherwise it rides on the blurred default so it isn't lost.
+  recorderStartMs = performance.now();
+  if (rawRecorder) {
+    rawRecorder.start(audioTrack);
+    blurredRecorder.start(null);
+  } else {
+    blurredRecorder.start(audioTrack);
+  }
+
   animalDeterrent.reset();
 
   running = true;
   frameCount = 0;
   lastFrameTs = performance.now();
-  ui.el.playback.hidden = true;
-  ui.setStatus(`Recording ${info.width}×${info.height}. Preview is BLURRED.`);
+  const rawNote = rawRecorder ? 'raw sealed in background' : 'blur-at-capture (no raw)';
+  ui.setStatus(`Recording ${info.width}×${info.height}. Preview is BLURRED · ${rawNote}.`);
   rafId = requestAnimationFrame(loop);
 }
 
@@ -187,21 +220,50 @@ async function stop() {
   if (!running) return;
   running = false;
   cancelAnimationFrame(rafId);
-  ui.setStatus('Finalizing recording…');
+  ui.setStatus('Finalizing recordings…');
 
-  let result = null;
-  try { result = recorder ? await recorder.stop() : null; } catch (e) { console.error(e); }
-  try { await session.stop(performance.now()); } catch (e) { console.error(e); }
+  const stopMs = performance.now();
+  if (incident) incident.finalize(stopMs);
+
+  let blurredResult = null;
+  let rawResult = null;
+  try { blurredResult = blurredRecorder ? await blurredRecorder.stop() : null; } catch (e) { console.error(e); }
+  try { rawResult = rawRecorder ? await rawRecorder.stop() : null; } catch (e) { console.error(e); }
+  try { await session.stop(stopMs); } catch (e) { console.error(e); }
   if (detection) detection.close();
   if (capture) capture.stop();
   ui.clearOverlay();
   ui.setWake(false);
   ui.setRunning(false);
 
-  if (result) {
-    ui.showPlayback(result.url, result.mimeType);
-    ui.setStatus('Session stopped. Blurred recording ready below.');
-  } else {
-    ui.setStatus('Session stopped. (No recording produced.)');
-  }
+  // Blurred default playback.
+  if (blurredResult) ui.showPlayback(blurredResult.url, blurredResult.mimeType);
+
+  // Sealed evidence review.
+  evidence.setBlurred(blurredResult);
+  evidence.setRaw(rawResult);
+  const segments = evidence.buildSegments(incident.incidents, recorderStartMs, stopMs);
+  ui.renderEvidence(segments, {
+    hasRaw: evidence.hasRaw(),
+    prerollSeconds: CONFIG.incident.prerollSeconds,
+    onUnseal: async (seg, rowEl) => {
+      const ok = window.confirm(
+        `Authorize unsealing Incident ${seg.index} (${seg.reasons.join(', ')})?\n\n` +
+        'In production this needs approver / split-key authorization. This action is written to the audit log.',
+      );
+      if (!ok) return;
+      const win = await evidence.unseal(seg, performance.now());
+      if (!win) return;
+      ui.markSegmentUnsealed(rowEl);
+      ui.playRawWindow(win.url, win.startSec, win.endSec, `Incident ${seg.index} — ${seg.reasons.join(', ')}`);
+      ui.renderAuditLog(auditLog.toJSON());
+    },
+  });
+  ui.renderAuditLog(auditLog.toJSON());
+
+  const n = incident.count();
+  ui.setStatus(
+    `Session stopped. Blurred recording ready · ${n} incident${n === 1 ? '' : 's'} ` +
+    `${evidence.hasRaw() ? 'sealed (authorize to view raw)' : 'flagged (policy: no raw retained)'}.`,
+  );
 }

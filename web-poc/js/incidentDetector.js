@@ -7,9 +7,10 @@
 // Audio-loudness and IMU triggers (§2.2) are native-phase work; the trigger()
 // entry point is generic so they slot in as additional sources without a rewrite.
 //
-// When an incident fires, native code seals the pre-roll ring buffer + live raw as
-// an encrypted evidence segment (§2.2 Evidence Sealer). Here we only mark/log the
-// incident and drive the UI banner (§11.2 sealing is stubbed).
+// Each incident records a start/end window (in wall-clock performance.now() ms).
+// The Evidence Sealer (evidenceStore.js) turns that window into a sealed raw
+// segment, reaching back `prerollSeconds` before the trigger so the buildup is
+// captured, and ending when the active window expires (clear + hold).
 
 import { CONFIG } from './config.js';
 
@@ -17,14 +18,15 @@ export class IncidentDetector {
   /**
    * @param {Object} deps
    * @param {import('./auditLog.js').AuditLog} deps.auditLog
-   * @param {(incident:Object)=>void} [deps.onIncident] fired on each new/renewed trigger
+   * @param {(incident:Object)=>void} [deps.onIncident] fired when a NEW incident opens
    */
   constructor({ auditLog, onIncident } = {}) {
     this.auditLog = auditLog;
     this.onIncident = onIncident || (() => {});
     this._active = false;
     this._activeUntilMs = 0;
-    /** @type {Array<{reason:string, tMs:number}>} */
+    this._current = null;
+    /** @type {Array<{reason:string, reasons:string[], startMs:number, endMs:number|null, detail:Object}>} */
     this.incidents = [];
   }
 
@@ -33,23 +35,24 @@ export class IncidentDetector {
    *
    * A trigger fired while an incident is already active only EXTENDS the active
    * window (native: keeps the evidence segment sealing until the condition clears
-   * + cooldown, §2.2). It does not count as a new incident, so a continuously
+   * + cooldown, §2.2). It does not open a new incident, so a continuously
    * approaching animal is one incident, not one-per-frame.
    */
   trigger(reason, nowMs, detail = {}) {
     this._activeUntilMs = Math.max(this._activeUntilMs, nowMs + CONFIG.incident.holdMs);
 
     if (this._active) {
-      // Ongoing incident: extend only. Record the extending reason on the segment.
-      const current = this.incidents[this.incidents.length - 1];
-      if (current && !current.reasons.includes(reason)) current.reasons.push(reason);
-      return current;
+      if (this._current && !this._current.reasons.includes(reason)) {
+        this._current.reasons.push(reason);
+      }
+      return this._current;
     }
 
     this._active = true;
-    const incident = { reason, reasons: [reason], tMs: nowMs, detail, sealed: false };
+    const incident = { reason, reasons: [reason], startMs: nowMs, endMs: null, detail };
+    this._current = incident;
     this.incidents.push(incident);
-    if (this.auditLog) this.auditLog.append('incident', { reason, detail }, nowMs);
+    if (this.auditLog) this.auditLog.append('incident-open', { reason, detail }, nowMs);
     this.onIncident({ ...incident, renewed: false });
     return incident;
   }
@@ -58,21 +61,32 @@ export class IncidentDetector {
   tick(nowMs) {
     if (this._active && nowMs >= this._activeUntilMs) {
       this._active = false;
+      if (this._current) {
+        this._current.endMs = this._activeUntilMs;
+        if (this.auditLog) this.auditLog.append('incident-close', { reason: this._current.reason }, this._activeUntilMs);
+        this._current = null;
+      }
     }
     return this._active;
   }
 
-  isActive() {
-    return this._active;
+  /** Close any still-open incident at session stop. */
+  finalize(nowMs) {
+    if (this._current && this._current.endMs === null) {
+      this._current.endMs = nowMs;
+      if (this.auditLog) this.auditLog.append('incident-close', { reason: this._current.reason, atStop: true }, nowMs);
+    }
+    this._active = false;
+    this._current = null;
   }
 
-  count() {
-    return this.incidents.length;
-  }
+  isActive() { return this._active; }
+  count() { return this.incidents.length; }
 
   reset() {
     this._active = false;
     this._activeUntilMs = 0;
+    this._current = null;
     this.incidents.length = 0;
   }
 }

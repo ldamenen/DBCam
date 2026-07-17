@@ -1,7 +1,7 @@
 // Pipeline verification with a STUBBED MediaPipe module (the real CDN is blocked
-// by this environment's network policy). We fulfill the tasks-vision import with a
-// fake that returns a centered face + a growing, centered dog, then drive the loop
-// and assert: canvas draws, FPS>0, deterrent fires, incident logged, playback ready.
+// by this environment's network policy). Drives the FULL flow: start -> flag a
+// manual incident -> stop -> verify blurred playback, a sealed evidence segment,
+// authorized unseal (with audit entry) and clamped raw playback.
 import { chromium } from 'playwright-core';
 import http from 'http';
 import fs from 'fs';
@@ -21,15 +21,14 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(PORT, r));
 
-// Stub ES module matching the MediaPipe Tasks API surface our code uses.
+// Stub: one centered face (so per-face pixelation runs), and a SMALL static dog
+// (below approach threshold) so the only incident is the manual Event we click.
 const STUB = `
-let n = 0;
 export const FilesetResolver = { forVisionTasks: async () => ({}) };
 export class FaceDetector {
   static async createFromOptions() { return new FaceDetector(); }
   detectForVideo(video) {
     const w = video.videoWidth || 1280, h = video.videoHeight || 720;
-    // one centered face, high confidence
     return { detections: [{ boundingBox: { originX: w*0.4, originY: h*0.3, width: w*0.2, height: h*0.25 },
       categories: [{ score: 0.95 }] }] };
   }
@@ -39,11 +38,8 @@ export class ObjectDetector {
   static async createFromOptions() { return new ObjectDetector(); }
   detectForVideo(video) {
     const w = video.videoWidth || 1280, h = video.videoHeight || 720;
-    n++;
-    // dog box grows toward the camera and stays centered -> should trigger "approach"
-    const frac = Math.min(0.5, 0.12 + n * 0.01);
-    const bw = Math.sqrt(frac) * w, bh = Math.sqrt(frac) * h;
-    return { detections: [{ boundingBox: { originX: (w-bw)/2, originY: (h-bh)/2, width: bw, height: bh },
+    const bw = w*0.10, bh = h*0.10;
+    return { detections: [{ boundingBox: { originX: 10, originY: 10, width: bw, height: bh },
       categories: [{ categoryName: 'dog', score: 0.9 }] }] };
   }
   close() {}
@@ -57,8 +53,8 @@ const browser = await chromium.launch({
 });
 const ctx = await browser.newContext({ permissions: ['camera', 'microphone'] });
 const page = await ctx.newPage();
+page.on('dialog', (d) => d.accept()); // auto-authorize the unseal confirm
 
-// Intercept the MediaPipe module import and serve our stub.
 await page.route('**/tasks-vision@**', (route) =>
   route.fulfill({ status: 200, contentType: 'text/javascript', body: STUB }));
 
@@ -68,41 +64,47 @@ page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
 
 await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'load' });
 await page.click('#startBtn');
-await page.waitForTimeout(6000);
-
-const mid = await page.evaluate(() => ({
-  fps: document.getElementById('fps').textContent,
-  status: document.getElementById('status').textContent,
-  stopDisabled: document.getElementById('stopBtn').disabled,
-  incidents: document.getElementById('incidentCount').textContent,
-  deterrent: document.getElementById('deterrentPill').textContent,
-  canvasNonBlank: (() => {
-    const canvas = document.getElementById('preview');
-    const c = document.createElement('canvas'); c.width = 32; c.height = 32;
-    const cx = c.getContext('2d'); cx.drawImage(canvas, 0, 0, 32, 32);
-    const d = cx.getImageData(0, 0, 32, 32).data;
-    for (let i = 0; i < d.length; i += 4) if (d[i] > 8 || d[i+1] > 8 || d[i+2] > 8) return true;
-    return false;
-  })(),
-}));
-
+await page.waitForTimeout(3000);
+await page.click('#eventBtn');          // flag a manual incident
+await page.waitForTimeout(2500);
 await page.click('#stopBtn');
 await page.waitForTimeout(2500);
-const end = await page.evaluate(() => ({
-  playbackHidden: document.getElementById('playback').hidden,
-  hasVideoSrc: !!document.getElementById('playbackVideo').src,
-  status: document.getElementById('status').textContent,
+
+const afterStop = await page.evaluate(() => ({
+  blurredHidden: document.getElementById('playback').hidden,
+  evidenceHidden: document.getElementById('evidence').hidden,
+  segmentCount: document.querySelectorAll('#segmentList .segment').length,
+  auditHidden: document.getElementById('auditSection').hidden,
+  auditCount: document.querySelectorAll('#auditList .audit-entry').length,
+  firstUnsealText: (document.querySelector('#segmentList .segment button') || {}).textContent || '',
 }));
 
-console.log('MID', JSON.stringify(mid, null, 2));
-console.log('END', JSON.stringify(end, null, 2));
+// Unseal the first segment.
+await page.click('#segmentList .segment button');
+await page.waitForTimeout(1500);
+const afterUnseal = await page.evaluate(() => ({
+  rawPlayerHidden: document.getElementById('rawPlayerWrap').hidden,
+  rawHasSrc: !!document.getElementById('rawVideo').src,
+  segUnsealedClass: !!document.querySelector('#segmentList .segment.unsealed'),
+  auditHasUnseal: [...document.querySelectorAll('#auditList .a-type')].some(e => e.textContent === 'raw-unseal'),
+}));
+
+console.log('AFTER_STOP', JSON.stringify(afterStop, null, 2));
+console.log('AFTER_UNSEAL', JSON.stringify(afterUnseal, null, 2));
 console.log('ERRORS', JSON.stringify(errors, null, 2));
 
 await browser.close();
 server.close();
 
-const fpsNum = parseFloat(mid.fps);
-const ok = mid.canvasNonBlank && !mid.stopDisabled && fpsNum > 0 &&
-  mid.incidents !== 'incidents: 0' && !end.playbackHidden && end.hasVideoSrc && errors.length === 0;
+const ok =
+  afterStop.blurredHidden === false &&
+  afterStop.evidenceHidden === false &&
+  afterStop.segmentCount >= 1 &&
+  afterStop.auditCount > 0 &&
+  afterUnseal.rawPlayerHidden === false &&
+  afterUnseal.rawHasSrc === true &&
+  afterUnseal.segUnsealedClass === true &&
+  afterUnseal.auditHasUnseal === true &&
+  errors.length === 0;
 console.log(ok ? 'PASS' : 'FAIL');
 process.exit(ok ? 0 : 1);

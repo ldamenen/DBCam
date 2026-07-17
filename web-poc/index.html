@@ -48,9 +48,33 @@
     </section>
 
     <section id="playback" class="playback" hidden>
-      <h2>Blurred recording</h2>
+      <h2>Blurred recording <span class="free-tag">free to view</span></h2>
+      <p class="section-sub">The privacy-safe default — faces obscured. Share/export freely.</p>
       <video id="playbackVideo" controls playsinline></video>
       <a id="downloadLink" class="btn" download>Download blurred file</a>
+    </section>
+
+    <section id="evidence" class="evidence" hidden>
+      <h2>Sealed raw evidence <span class="locked-tag">authorization required</span></h2>
+      <p class="section-sub">
+        The unblurred footage exists but is <strong>sealed</strong>. Each incident below is a
+        segment reaching back <span id="prerollLabel">6</span>s before the trigger (the buildup).
+        Unsealing simulates approver authorization and is written to the audit log.
+      </p>
+      <ul id="segmentList" class="segment-list"></ul>
+      <div id="rawPlayerWrap" class="raw-player" hidden>
+        <div class="raw-player-head">
+          <span id="rawPlayerLabel">Unsealed segment</span>
+          <button id="rawPlayerClose" class="btn small">Close</button>
+        </div>
+        <video id="rawVideo" controls playsinline></video>
+        <p class="fine">Playback is clamped to the incident window; the rest of the raw stays sealed.</p>
+      </div>
+    </section>
+
+    <section id="auditSection" class="audit" hidden>
+      <h2>Audit log <span class="chain-tag">append-only · hash-chained</span></h2>
+      <ol id="auditList" class="audit-list"></ol>
     </section>
 
     <section class="scope-note">
@@ -63,9 +87,10 @@
         <li><strong>Encryption at rest</strong> — no Secure-Enclave / Keystore key storage.</li>
         <li><strong>Always-on / background recording</strong> — browsers suspend hidden tabs; the
           screen wake lock is best-effort and can be released by the OS.</li>
-        <li><strong>Sealed raw evidence</strong> — the encrypted raw pre-roll ring buffer and
-          authorized unseal are stubbed. Here, capture is raw but blur is applied on the canvas
-          before display/recording; the raw feed is never persisted.</li>
+        <li><strong>Encrypted, tamper-proof sealing</strong> — this PoC <em>does</em> demonstrate the
+          flow (raw recorded continuously, incidents sealed as segments, authorized unseal + audit
+          log), but the raw blob is not encrypted at rest and the "authorization" is a UI gate, not
+          split-key cryptography. That hardening is native-only.</li>
         <li><strong>Jurisdiction enforcement</strong> — the Policy Engine is an injectable stub and
           does not resolve or enforce real law.</li>
       </ul>

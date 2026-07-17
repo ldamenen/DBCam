@@ -45,10 +45,23 @@ python3 -m http.server 8000
 ```
 
 Press **Start session**, grant camera (+ mic if the active profile allows it), and
-you should see the **blurred** preview. Detection boxes, an FPS counter, and status
-pills show what the pipeline is doing. Press **Stop** to get inline playback and a
-download link. The **Event** button and an approaching animal both flag an incident;
-an approaching animal also triggers the audible deterrent (with a cooldown).
+you should see the **blurred** (pixelated) preview. Detection boxes, an FPS counter,
+and status pills show what the pipeline is doing. The **Event** button and an
+approaching animal both flag an incident; an approaching animal also triggers the
+audible deterrent (with a cooldown).
+
+Press **Stop** to get the review:
+- **Blurred recording** — the privacy-safe default, freely playable/downloadable.
+- **Sealed raw evidence** — each incident is a segment of the *unblurred* recording,
+  reaching back `prerollSeconds` before the trigger (the buildup). It stays sealed
+  until you click **Authorize & unseal**, which writes to the audit log and then
+  plays *only* that incident's window. The live preview is never unblurred — raw is
+  release-time only (§1).
+- **Audit log** — append-only, hash-chained; every incident open/close and every
+  raw unseal is recorded.
+
+The raw is only recorded when the active policy profile is `raw-sealed`; a
+`blur-at-capture` profile retains no raw at all (§7).
 
 ## What maps to what
 
@@ -62,24 +75,29 @@ reads the same across the web PoC and the future iOS/Android apps:
 | `faceBlur.js` | Face Detect + Blur | **Fail-safe over-blur** on stale/low-confidence detection. |
 | `animalDeterrent.js` | Animal Deterrent Detector | Approach = box large + growing + centered. |
 | `deterrentSound.js` | (deterrent output) | Web Audio alarm, cooldown, sensitivity. |
-| `incidentDetector.js` | Incident Detector | Manual button + animal approach (audio/IMU = native). |
-| `recorder.js` | Encrypted Store (blurred layer) | Records the **blurred canvas**, never the raw feed. |
+| `incidentDetector.js` | Incident Detector | Manual button + animal approach; tracks each incident's start/end window (audio/IMU = native). |
+| `recorder.js` | Encrypted Store (both layers) | Records the **blurred canvas** (default) and, in parallel, the **raw camera feed** (sealed). |
+| `evidenceStore.js` | Evidence Sealer + Store | Builds sealed segments (with pre-roll) from incidents; gates authorized unseal. |
 | `sessionController.js` | Session Controller | Screen Wake Lock + interruption **gap markers**. |
-| `policyEngine.js` | Jurisdiction Policy Engine (§7) | **Injectable stub**; capture reads behavior from the profile. |
-| `auditLog.js` | Audit Log | Append-only, hash-chained shape (in-memory PoC). |
-| `ui.js` | Review/Download UI | Overlays, FPS, profile/incident banners, playback. |
+| `policyEngine.js` | Jurisdiction Policy Engine (§7) | **Injectable stub**; capture + raw-retention read from the profile. |
+| `auditLog.js` | Audit Log | Append-only, hash-chained; logs incidents + every raw unseal. |
+| `ui.js` | Review/Download UI | Overlays, FPS, banners, blurred playback, sealed-evidence review, audit view. |
 
 ## Scope limits
 
 Per §11.2, this PoC deliberately does **not** provide:
 
-- **Encryption at rest** — no Secure-Enclave / Keystore-backed keys.
+- **Encryption at rest** — no Secure-Enclave / Keystore-backed keys; the raw blob is
+  held in memory, not encrypted.
 - **Always-on / background recording** — browsers suspend hidden tabs; the wake
   lock is best-effort.
-- **Sealed raw evidence** — the encrypted raw pre-roll ring buffer + authorized
-  unseal are stubbed. Capture is raw, but blur is applied on the canvas *before*
-  display/recording, and the raw feed is never persisted.
-- **Jurisdiction enforcement** — the Policy Engine is a static injectable stub.
+- **Cryptographic sealing / split-key authorization** — the PoC *demonstrates* the
+  flow (raw recorded continuously, incidents sealed as segments with pre-roll,
+  authorized unseal + audit log), but "authorization" is a UI confirm, not a
+  split-key/approver control, and playback is only *clamped* to the window rather
+  than cryptographically sealed.
+- **Jurisdiction enforcement** — the Policy Engine is a static injectable stub (it
+  does drive raw-retention on/off, but does not resolve or enforce real law).
 
 ## Where browser limitations bite
 

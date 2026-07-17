@@ -65,10 +65,13 @@ export const CONFIG = {
   },
 
   incident: {
-    // How long an incident banner stays "active" after the trigger clears.
+    // How long an incident stays "active" after the last trigger (the hold/cooldown
+    // during which the evidence segment keeps sealing).
     holdMs: 6000,
-    // In native this is the pre-roll ring buffer + cooldown; here it is display-only.
-    prerollSecondsLabel: 30,
+    // Pre-roll: how far BEFORE the trigger the sealed segment reaches back, so the
+    // buildup is captured (§1). Native uses an encrypted ring buffer; here the raw
+    // is recorded continuously and the segment just seeks back this far.
+    prerollSeconds: 6,
   },
 
   recorder: {
