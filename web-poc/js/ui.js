@@ -25,6 +25,9 @@ export class UI {
       incidentCount: document.getElementById('incidentCount'),
       detPill: document.getElementById('detPill'),
       version: document.getElementById('version'),
+      sessionState: document.getElementById('sessionState'),
+      recTimer: document.getElementById('recTimer'),
+      reviewHeader: document.getElementById('reviewHeader'),
       playback: document.getElementById('playback'),
       playbackVideo: document.getElementById('playbackVideo'),
       downloadLink: document.getElementById('downloadLink'),
@@ -59,11 +62,25 @@ export class UI {
     this.el.startBtn.disabled = running;
     this.el.stopBtn.disabled = !running;
     this.el.eventBtn.disabled = !running;
+    document.body.classList.toggle('running', running);
+    if (running) document.body.classList.add('started');
   }
 
   setStatus(text) { this.el.status.textContent = text; }
 
   setVersion(v) { if (this.el.version) this.el.version.textContent = v; }
+
+  /** Header state chip: 'idle' | 'recording' | 'review'. */
+  setSessionState(state) {
+    const label = { idle: 'Idle', recording: 'Recording', review: 'Review' }[state] || state;
+    this.el.sessionState.textContent = label;
+    this.el.sessionState.className = `state-chip ${state}`;
+  }
+
+  setRecTimer(ms) {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    this.el.recTimer.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
 
   /** Live detector readout: face count + whether the fail-safe over-blur is active. */
   setDetectorStatus({ ok, faces, overBlurred }) {
@@ -144,6 +161,7 @@ export class UI {
 
   showPlayback(url, mimeType) {
     if (!url) return;
+    this.el.reviewHeader.hidden = false;
     this.el.playback.hidden = false;
     this.el.playbackVideo.src = url;
     this.el.downloadLink.href = url;
@@ -160,6 +178,7 @@ export class UI {
    * @param {(segment:Object, rowEl:HTMLElement)=>void} opts.onUnseal
    */
   renderEvidence(segments, { hasRaw, prerollSeconds, onUnseal }) {
+    this.el.reviewHeader.hidden = false;
     this.el.evidence.hidden = false;
     this.el.prerollLabel.textContent = String(prerollSeconds);
     const list = this.el.segmentList;

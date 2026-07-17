@@ -44,6 +44,7 @@ let blurredRecorder = null;
 let rawRecorder = null;
 let evidence = null;
 let recorderStartMs = 0;
+let sessionStartMs = 0;
 let activeProfile = null;
 
 let running = false;
@@ -117,10 +118,14 @@ async function start() {
   evidence.setRawMode(profile.rawMode);
 
   // Reset review UI from any prior session.
+  ui.el.reviewHeader.hidden = true;
   ui.el.playback.hidden = true;
   ui.el.evidence.hidden = true;
   ui.el.auditSection.hidden = true;
   ui.closeRawPlayer();
+  ui.setSessionState('recording');
+  sessionStartMs = performance.now();
+  ui.setRecTimer(0);
 
   // Recorders. Blurred default = the canvas. Raw sealed evidence = the camera track
   // itself, recorded only when the policy permits retaining raw (§7).
@@ -217,6 +222,7 @@ function loop() {
     overBlurred: blurInfo.overBlurred,
   });
   ui.updateFps(dt);
+  ui.setRecTimer(now - sessionStartMs);
   ui.setWake(session.hasWakeLock());
 
   rafId = requestAnimationFrame(loop);
@@ -268,6 +274,7 @@ async function stop() {
   ui.renderAuditLog(auditLog.toJSON());
 
   const n = incident.count();
+  ui.setSessionState(blurredResult ? 'review' : 'idle');
   ui.setStatus(
     `Session stopped. Blurred recording ready · ${n} incident${n === 1 ? '' : 's'} ` +
     `${evidence.hasRaw() ? 'sealed (authorize to view raw)' : 'flagged (policy: no raw retained)'}.`,
