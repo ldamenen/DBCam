@@ -80,8 +80,9 @@ function applyVoice() {
     voice.start(cfg.word, {
       onTrigger: () => {
         if (!running || !incident) return;
-        incident.trigger('voice', performance.now());
         ui.flashVoiceHeard();
+        // Same effect as a hostile-animal event: seal + sound the deterrent.
+        fireEvent('voice', performance.now());
       },
       onStatus: (s) => ui.setVoiceStatus(s),
     });
@@ -105,9 +106,25 @@ ui.onStop(async () => { await stop(); });
 ui.onEvent(() => {
   if (!running || !incident) return;
   // Manual "Event" button — the non-negotiable hard override into evidence mode.
-  // The preview stays blurred; this seals the raw incident window for later review.
-  incident.trigger('manual', performance.now());
+  // The preview stays blurred; this seals the raw incident window AND sounds the
+  // deterrent, the same effect as a detected hostile animal.
+  fireEvent('manual', performance.now());
 });
+
+/**
+ * Fire an incident AND sound the deterrent alarm — the shared effect of any
+ * "event" trigger (manual button, voice word, hostile animal). Deterrent respects
+ * its own cooldown so rapid re-triggers don't blast repeatedly.
+ */
+function fireEvent(reason, nowMs, detail = {}) {
+  if (!running || !incident) return;
+  incident.trigger(reason, nowMs, detail);
+  if (deterrentSound.canPlay(nowMs)) {
+    deterrentSound.play(nowMs);
+    audioMonitor.notifyDeterrent(nowMs);
+    auditLog.append('deterrent-fired', { reason, ...detail }, nowMs);
+  }
+}
 
 async function start() {
   ui.setRunning(true);
@@ -228,13 +245,8 @@ function loop() {
   ui.setSoundLevel(audioLevel);
   const threat = animalDeterrent.update(lastAnimals, capture.width, capture.height, now, audioLevel);
   if (threat.hostile) {
-    if (deterrentSound.canPlay(now)) {
-      deterrentSound.play(now);
-      audioMonitor.notifyDeterrent(now); // don't let our own alarm self-trigger
-      auditLog.append('deterrent-fired', { label: threat.animal.label, threat: Number(threat.threatScore.toFixed(2)) }, now);
-    }
-    // Early trigger: seal the buildup before contact (§2.2).
-    incident.trigger('hostile-animal', now, {
+    // Early trigger: seal the buildup before contact (§2.2) + sound the deterrent.
+    fireEvent('hostile-animal', now, {
       label: threat.animal.label,
       threatScore: Number(threat.threatScore.toFixed(2)),
       reasons: threat.reasons,
