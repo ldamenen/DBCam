@@ -30,13 +30,16 @@ export const CONFIG = {
   },
 
   blur: {
-    // Fail-safe blur (§2.2, §4). Detected faces are blurred with a generous
-    // padding; if detection is stale or low-confidence we over-blur instead of leaking.
-    facePaddingPct: 0.35,      // expand each face box by this fraction on all sides
-    blurRadiusPx: 26,          // gaussian radius used for face regions
-    // If no fresh, confident face result within this many ms, blur the WHOLE frame.
+    // Fail-safe blur (§2.2, §4). Faces are obscured by PIXELATION (mosaic), not
+    // canvas gaussian blur: iOS Safari does not support CanvasRenderingContext2D
+    // .filter, so a downscale->upscale mosaic is the only obscuring method that
+    // works reliably across browsers. Fewer blocks = stronger obscuring.
+    facePaddingPct: 0.35,        // expand each face box by this fraction on all sides
+    mosaicBlocksFace: 8,         // ~blocks across the larger side of a face region
+    mosaicBlocksLowConf: 6,      // stronger (fewer blocks) when confidence is low
+    mosaicBlocksFullFrame: 20,   // whole-frame fail-safe pixelation
+    // If no fresh, confident face result within this many ms, over-blur the WHOLE frame.
     stallOverblurMs: 350,
-    fullFrameFallbackBlurPx: 34,
   },
 
   animals: {
