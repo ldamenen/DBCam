@@ -1,0 +1,228 @@
+{
+  "meta": {
+    "rulesetVersion": "0.2.0-DRAFT-UNVERIFIED",
+    "defaultProfileId": "RESTRICTED_DEFAULT",
+    "description": "GPS coordinates / manual jurisdiction codes -> expected resolution through the PolicyEngine (ruleset + geo bounds injected from core/data/*.json). Multiple geo candidates are expected; the engine takes the strictest."
+  },
+  "geoCases": [
+    {
+      "name": "paris",
+      "lat": 48.8566,
+      "lon": 2.3522,
+      "expect": {
+        "jurisdictionCode": "FR",
+        "profileId": "FR_BLOCKED"
+      }
+    },
+    {
+      "name": "barcelona",
+      "lat": 41.3874,
+      "lon": 2.1686,
+      "expect": {
+        "jurisdictionCode": "ES",
+        "profileId": "ES_STRICT"
+      }
+    },
+    {
+      "name": "singapore",
+      "lat": 1.3521,
+      "lon": 103.8198,
+      "expect": {
+        "jurisdictionCode": "SG",
+        "profileId": "SG_PERSONAL"
+      }
+    },
+    {
+      "name": "hong-kong",
+      "lat": 22.3193,
+      "lon": 114.1694,
+      "expect": {
+        "jurisdictionCode": "HK",
+        "profileId": "HK_PERSONAL"
+      }
+    },
+    {
+      "name": "mexico-city",
+      "lat": 19.4326,
+      "lon": -99.1332,
+      "expect": {
+        "jurisdictionCode": "MX",
+        "profileId": "MX_PERSONAL"
+      }
+    },
+    {
+      "name": "brisbane",
+      "lat": -27.4698,
+      "lon": 153.0251,
+      "expect": {
+        "jurisdictionCode": "AU-QLD",
+        "profileId": "AU_ONE_PARTY"
+      }
+    },
+    {
+      "name": "melbourne",
+      "lat": -37.8136,
+      "lon": 144.9631,
+      "expect": {
+        "jurisdictionCode": "AU-VIC",
+        "profileId": "AU_ALL_PARTY",
+        "candidatesInclude": [
+          "AU-VIC",
+          "AU"
+        ]
+      }
+    },
+    {
+      "name": "sydney",
+      "lat": -33.8688,
+      "lon": 151.2093,
+      "expect": {
+        "jurisdictionCode": "AU-NSW",
+        "profileId": "AU_ALL_PARTY"
+      }
+    },
+    {
+      "name": "tokyo",
+      "lat": 35.6762,
+      "lon": 139.6503,
+      "expect": {
+        "jurisdictionCode": null,
+        "profileId": "RESTRICTED_DEFAULT",
+        "noCandidates": true
+      }
+    },
+    {
+      "name": "es-fr-border",
+      "lat": 42.42,
+      "lon": 2.85,
+      "expect": {
+        "jurisdictionCode": "FR",
+        "profileId": "FR_BLOCKED",
+        "candidatesInclude": [
+          "FR",
+          "ES"
+        ]
+      }
+    }
+  ],
+  "manualCases": [
+    {
+      "code": "FR",
+      "expect": {
+        "profileId": "FR_BLOCKED",
+        "recordingAllowed": false,
+        "audioCapture": false
+      }
+    },
+    {
+      "code": "ES",
+      "expect": {
+        "profileId": "ES_STRICT",
+        "rawRetention": "blurAtCapture",
+        "audioCapture": false
+      }
+    },
+    {
+      "code": "SG",
+      "expect": {
+        "profileId": "SG_PERSONAL",
+        "rawRetention": "sealed",
+        "audioCapture": true
+      }
+    },
+    {
+      "code": "HK",
+      "expect": {
+        "profileId": "HK_PERSONAL",
+        "rawRetention": "sealed",
+        "audioCapture": true
+      }
+    },
+    {
+      "code": "MX",
+      "expect": {
+        "profileId": "MX_PERSONAL",
+        "rawRetention": "sealed",
+        "audioCapture": true
+      }
+    },
+    {
+      "code": "AU",
+      "expect": {
+        "profileId": "AU_ALL_PARTY",
+        "audioCapture": false
+      }
+    },
+    {
+      "code": "AU-QLD",
+      "expect": {
+        "profileId": "AU_ONE_PARTY",
+        "audioCapture": true
+      }
+    },
+    {
+      "code": "AU-NT",
+      "expect": {
+        "profileId": "AU_ONE_PARTY",
+        "audioCapture": true
+      }
+    },
+    {
+      "code": "AU-VIC",
+      "expect": {
+        "profileId": "AU_ALL_PARTY",
+        "audioCapture": false
+      }
+    },
+    {
+      "code": "AU-NSW",
+      "expect": {
+        "profileId": "AU_ALL_PARTY",
+        "audioCapture": false
+      }
+    },
+    {
+      "code": "AU-SA",
+      "expect": {
+        "profileId": "AU_ALL_PARTY",
+        "audioCapture": false
+      }
+    },
+    {
+      "code": "AU-WA",
+      "expect": {
+        "profileId": "AU_ALL_PARTY",
+        "audioCapture": false
+      }
+    },
+    {
+      "code": "AU-TAS",
+      "expect": {
+        "profileId": "AU_ALL_PARTY",
+        "audioCapture": false
+      }
+    },
+    {
+      "code": "AU-ACT",
+      "expect": {
+        "profileId": "AU_ALL_PARTY",
+        "audioCapture": false
+      }
+    },
+    {
+      "code": "JP",
+      "expect": {
+        "profileId": "RESTRICTED_DEFAULT",
+        "unmatchedEvent": true
+      }
+    }
+  ],
+  "distinctCountryCodes": [
+    "FR",
+    "ES",
+    "SG",
+    "HK",
+    "MX",
+    "AU"
+  ]
+}

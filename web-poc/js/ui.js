@@ -28,9 +28,41 @@ export class UI {
       fps: document.getElementById('fps'),
       status: document.getElementById('status'),
       profileBanner: document.getElementById('profileBanner'),
-      regionSelect: document.getElementById('regionSelect'),
-      regionHint: document.getElementById('regionHint'),
-      regionHintClose: document.getElementById('regionHintClose'),
+      // Settings — location & privacy rules (§6)
+      policyLocation: document.getElementById('policyLocation'),
+      policyProfileName: document.getElementById('policyProfileName'),
+      policySource: document.getElementById('policySource'),
+      policyConfidence: document.getElementById('policyConfidence'),
+      policyStatusNote: document.getElementById('policyStatusNote'),
+      refreshLocationBtn: document.getElementById('refreshLocationBtn'),
+      policyBlockedCard: document.getElementById('policyBlockedCard'),
+      policyBlockedProfile: document.getElementById('policyBlockedProfile'),
+      rulesList: document.getElementById('rulesList'),
+      rulesNotes: document.getElementById('rulesNotes'),
+      rulesVersionNote: document.getElementById('rulesVersionNote'),
+      locModeAuto: document.getElementById('locModeAuto'),
+      locModeManual: document.getElementById('locModeManual'),
+      jurisdictionSelect: document.getElementById('jurisdictionSelect'),
+      overrideEnable: document.getElementById('overrideEnable'),
+      overrideProfileSelect: document.getElementById('overrideProfileSelect'),
+      overrideMsg: document.getElementById('overrideMsg'),
+      overrideBanner: document.getElementById('overrideBanner'),
+      overrideBannerText: document.getElementById('overrideBannerText'),
+      overrideOffBtn: document.getElementById('overrideOffBtn'),
+      overrideChip: document.getElementById('overrideChip'),
+      rulesetInfo: document.getElementById('rulesetInfo'),
+      checkUpdatesBtn: document.getElementById('checkUpdatesBtn'),
+      rulesetMsg: document.getElementById('rulesetMsg'),
+      noticeStrip: document.getElementById('noticeStrip'),
+      noticeStripText: document.getElementById('noticeStripText'),
+      noticeStripClose: document.getElementById('noticeStripClose'),
+      overrideModal: document.getElementById('overrideModal'),
+      ovmContext: document.getElementById('ovmContext'),
+      ovmChanges: document.getElementById('ovmChanges'),
+      ovmAck: document.getElementById('ovmAck'),
+      ovmCancel: document.getElementById('ovmCancel'),
+      ovmConfirm: document.getElementById('ovmConfirm'),
+      publishNote: document.getElementById('publishNote'),
       incidentBanner: document.getElementById('incidentBanner'),
       wakePill: document.getElementById('wakePill'),
       audioPill: document.getElementById('audioPill'),
@@ -66,7 +98,27 @@ export class UI {
     this.overlayCtx = this.el.overlay.getContext('2d');
     this._fpsSamples = [];
     this._rawClampHandler = null;
+    this._recordingAllowed = true;
+    this._running = false;
+    this._modalHandlers = null;
     this.el.rawPlayerClose.addEventListener('click', () => this.closeRawPlayer());
+    this.el.noticeStripClose.addEventListener('click', () => this.showNotice(null));
+    // Modal wiring: checkbox enables the confirm button; buttons call the
+    // handlers installed by openOverrideModal.
+    this.el.ovmAck.addEventListener('change', () => {
+      this.el.ovmConfirm.disabled = !this.el.ovmAck.checked;
+    });
+    this.el.ovmCancel.addEventListener('click', () => {
+      const h = this._modalHandlers;
+      this.closeOverrideModal();
+      if (h && h.onCancel) h.onCancel();
+    });
+    this.el.ovmConfirm.addEventListener('click', () => {
+      if (!this.el.ovmAck.checked) return;
+      const h = this._modalHandlers;
+      this.closeOverrideModal();
+      if (h && h.onConfirm) h.onConfirm();
+    });
   }
 
   onStart(fn) { this.el.startBtn.addEventListener('click', fn); }
@@ -80,28 +132,185 @@ export class UI {
     });
   }
 
-  // --- Region picker (the rules themselves live in the Core policy table) ---
-  /** Fill the region <select> from Core listRegions() output: [{id, label}]. */
-  populateRegions(regions, selectedId) {
-    const sel = this.el.regionSelect;
+  // ===== Settings — location & privacy rules (§6) =====
+  // Everything here renders PURELY from the resolved profile / engine output;
+  // no per-jurisdiction strings live in the web client.
+
+  /** Status card lines. All args are prepared display strings from main.js. */
+  renderPolicyStatus({ locationLabel, profileName, sourceLabel, confidenceLabel, note }) {
+    this.el.policyLocation.textContent = locationLabel;
+    this.el.policyProfileName.textContent = profileName;
+    this.el.policySource.textContent = sourceLabel;
+    this.el.policyConfidence.textContent = confidenceLabel;
+    this.el.policyStatusNote.hidden = !note;
+    this.el.policyStatusNote.textContent = note || '';
+  }
+
+  onRefreshLocation(fn) { this.el.refreshLocationBtn.addEventListener('click', fn); }
+
+  /** Red blocking card (recordingAllowed = false). Pass null to hide. */
+  showBlockedCard(profileName) {
+    this.el.policyBlockedCard.hidden = profileName == null;
+    this.el.policyBlockedProfile.textContent = profileName || '';
+  }
+
+  /** Plain-language "what the rules here mean" list — rendered purely from
+   *  profile fields, so a new jurisdiction needs zero UI changes. */
+  renderRulesList(profile) {
+    const rows = [
+      ['Recording', profile.recordingAllowed ? 'Allowed' : 'Not allowed', !profile.recordingAllowed],
+      ['Original video', profile.rawRetention === 'sealed' ? 'Kept locked' : 'Not kept', profile.rawRetention !== 'sealed'],
+      ['Microphone', profile.audioCapture ? 'On' : 'Off', !profile.audioCapture],
+      ['Sound-based alerts', profile.audioTriggerAllowed ? 'Available' : 'Unavailable', !profile.audioTriggerAllowed],
+      ['Blur', profile.blurMode === 'facesAndBodies' ? 'Faces and bodies' : 'Faces', false],
+      ['Auto-delete', `After ${profile.retentionDays} day${profile.retentionDays === 1 ? '' : 's'}`, false],
+      ['Sharing and saving', profile.publishingAllowed ? 'Allowed' : 'Turned off', !profile.publishingAllowed],
+    ];
+    const list = this.el.rulesList;
+    list.innerHTML = '';
+    for (const [key, val, off] of rows) {
+      const li = document.createElement('li');
+      li.innerHTML =
+        `<span class="rule-key">${escapeHtml(key)}</span>` +
+        `<span class="rule-val${off ? ' off' : ''}">${escapeHtml(val)}</span>`;
+      list.appendChild(li);
+    }
+  }
+
+  /** "Why these rules?" disclosure: profile notes + ruleset provenance line. */
+  renderWhyRules(profile, rulesetLine) {
+    this.el.rulesNotes.textContent = profile.notes || '';
+    this.el.rulesVersionNote.textContent = rulesetLine;
+  }
+
+  // --- Location detection mode ---
+  onLocationModeChange(fn) {
+    const emit = () => fn(this.el.locModeAuto.checked ? 'auto' : 'manual');
+    this.el.locModeAuto.addEventListener('change', emit);
+    this.el.locModeManual.addEventListener('change', emit);
+  }
+  setLocationMode(mode) {
+    this.el.locModeAuto.checked = mode === 'auto';
+    this.el.locModeManual.checked = mode === 'manual';
+    this.el.jurisdictionSelect.hidden = mode !== 'manual';
+  }
+  /** Fill the manual jurisdiction <select> from engine.listJurisdictions(). */
+  populateJurisdictions(jurisdictions, selectedCode) {
+    const sel = this.el.jurisdictionSelect;
     sel.innerHTML = '';
-    for (const r of regions) {
+    const ph = document.createElement('option');
+    ph.value = '';
+    ph.textContent = 'Choose where you are…';
+    ph.disabled = true;
+    sel.appendChild(ph);
+    for (const j of jurisdictions) {
       const opt = document.createElement('option');
-      opt.value = r.id;
-      opt.textContent = r.label;
+      opt.value = j.code;
+      opt.textContent = j.displayName;
       sel.appendChild(opt);
     }
-    sel.value = selectedId;
+    sel.value = selectedCode || '';
+    if (!sel.value) ph.selected = true;
   }
-  onRegionChange(fn) {
-    this.el.regionSelect.addEventListener('change', () => fn(this.el.regionSelect.value));
+  onJurisdictionChange(fn) {
+    this.el.jurisdictionSelect.addEventListener('change', () => fn(this.el.jurisdictionSelect.value));
   }
-  /** First-run tip near the profile bar; close button wired via onRegionHintClose. */
-  showRegionHint(show) { this.el.regionHint.hidden = !show; }
-  onRegionHintClose(fn) { this.el.regionHintClose.addEventListener('click', fn); }
+
+  // --- Override controls ---
+  onOverrideToggle(fn) {
+    this.el.overrideEnable.addEventListener('change', () => fn(this.el.overrideEnable.checked));
+  }
+  setOverrideChecked(checked) { this.el.overrideEnable.checked = checked; }
+  /** @param {Array<{id:string, label:string}>} options prepared by main.js */
+  populateOverrideProfiles(options, selectedId) {
+    const sel = this.el.overrideProfileSelect;
+    sel.innerHTML = '';
+    const ph = document.createElement('option');
+    ph.value = '';
+    ph.textContent = 'Choose the rules to use…';
+    ph.disabled = true;
+    sel.appendChild(ph);
+    for (const o of options) {
+      const opt = document.createElement('option');
+      opt.value = o.id;
+      opt.textContent = o.label;
+      sel.appendChild(opt);
+    }
+    sel.value = selectedId || '';
+    if (!sel.value) ph.selected = true;
+  }
+  showOverridePicker(show) { this.el.overrideProfileSelect.hidden = !show; }
+  onOverrideProfilePick(fn) {
+    this.el.overrideProfileSelect.addEventListener('change', () => {
+      if (this.el.overrideProfileSelect.value) fn(this.el.overrideProfileSelect.value);
+    });
+  }
+  resetOverridePick() { this.el.overrideProfileSelect.value = ''; }
+  setOverrideMessage(text) {
+    this.el.overrideMsg.hidden = !text;
+    this.el.overrideMsg.textContent = text || '';
+  }
+  /** Amber banner in Settings. Pass null to hide. */
+  showOverrideBanner(text) {
+    this.el.overrideBanner.hidden = text == null;
+    this.el.overrideBannerText.textContent = text || '';
+  }
+  onOverrideOff(fn) { this.el.overrideOffBtn.addEventListener('click', fn); }
+  /** Amber chip on the recording stage. */
+  showOverrideChip(show) { this.el.overrideChip.hidden = !show; }
+
+  /**
+   * The loosening confirmation modal (§ override). A real HTML dialog: the
+   * confirm button stays disabled until the responsibility checkbox is ticked.
+   * @param {{contextLines:string[], sentences:string[], onConfirm:()=>void, onCancel:()=>void}} opts
+   */
+  openOverrideModal({ contextLines, sentences, onConfirm, onCancel }) {
+    this.el.ovmContext.innerHTML = contextLines.map((l) => escapeHtml(l)).join('<br>');
+    const ul = this.el.ovmChanges;
+    ul.innerHTML = '';
+    for (const s of sentences) {
+      const li = document.createElement('li');
+      li.textContent = s;
+      ul.appendChild(li);
+    }
+    this.el.ovmAck.checked = false;
+    this.el.ovmConfirm.disabled = true;
+    this._modalHandlers = { onConfirm, onCancel };
+    this.el.overrideModal.hidden = false;
+  }
+  closeOverrideModal() {
+    this._modalHandlers = null;
+    this.el.overrideModal.hidden = true;
+  }
+
+  // --- Ruleset row ---
+  setRulesetInfo(text) { this.el.rulesetInfo.textContent = text; }
+  onCheckUpdates(fn) { this.el.checkUpdatesBtn.addEventListener('click', fn); }
+  setRulesetMessage(text) {
+    this.el.rulesetMsg.hidden = !text;
+    this.el.rulesetMsg.textContent = text || '';
+  }
+
+  /** Dismissible notice strip over the stage (profile.noticeText). */
+  showNotice(text) {
+    this.el.noticeStrip.hidden = text == null;
+    this.el.noticeStripText.textContent = text || '';
+  }
+
+  /** Gate the REC indicator + privacy badge (requiresVisibleIndicator). */
+  setVisibleIndicator(required) {
+    document.body.classList.toggle('no-indicator', !required);
+  }
+
+  /** App-wide start gate: recordingAllowed=false keeps Start disabled. */
+  setRecordingAllowed(allowed) {
+    this._recordingAllowed = allowed;
+    this.el.startBtn.disabled = this._running || !this._recordingAllowed;
+  }
 
   setRunning(running) {
-    this.el.startBtn.disabled = running;
+    this._running = running;
+    this.el.startBtn.disabled = running || !this._recordingAllowed;
     this.el.stopBtn.disabled = !running;
     this.el.eventBtn.disabled = !running;
     document.body.classList.toggle('running', running);
@@ -187,13 +396,14 @@ export class UI {
     this.el.detPill.style.color = overBlurred && !ok ? 'var(--danger)' : '';
   }
 
+  /** Compact banner + pills for the ACTIVE policy profile (new engine shape). */
   showProfile(profile) {
-    const days = Math.max(1, Math.round(profile.retentionSeconds / 86400));
-    const rawTxt = profile.rawMode === 'raw-sealed' ? 'kept locked' : 'not kept';
+    const days = profile.retentionDays;
+    const rawTxt = profile.rawRetention === 'sealed' ? 'kept locked' : 'not kept';
     this.el.profileBanner.textContent =
-      `Region: ${profile.jurisdiction} · Original video: ${rawTxt} · Sound: ${profile.audioEnabled ? 'on' : 'off'} · Auto-deletes after ${days} day${days === 1 ? '' : 's'}`;
+      `Rules: ${profile.displayName} · Original video: ${rawTxt} · Sound: ${profile.audioCapture ? 'on' : 'off'} · Auto-deletes after ${days} day${days === 1 ? '' : 's'}`;
     this.el.rawPill.textContent = `Original video: ${rawTxt}`;
-    this.el.audioPill.textContent = `Sound: ${profile.audioEnabled ? 'on' : 'off'}`;
+    this.el.audioPill.textContent = `Sound: ${profile.audioCapture ? 'on' : 'off'}`;
   }
 
   setWake(on) { this.el.wakePill.textContent = `stay-awake: ${on ? 'on' : 'off'}`; }
@@ -202,6 +412,11 @@ export class UI {
     const pct = Math.round(level * 100);
     this.el.soundPill.textContent = `sound: ${pct}%`;
     this.el.soundPill.style.color = level > 0.45 ? 'var(--danger)' : '';
+  }
+  /** Sound-based alerts unavailable under the active privacy rules. */
+  setSoundDisabledByPolicy() {
+    this.el.soundPill.textContent = 'sound: off (privacy rules)';
+    this.el.soundPill.style.color = '';
   }
   setIncidentCount(n) { this.el.incidentCount.textContent = `Alerts: ${n}`; }
 
@@ -274,11 +489,17 @@ export class UI {
     }
   }
 
-  showPlayback(url, mimeType) {
+  /**
+   * @param {boolean} [publishingAllowed] false hides the "Save privacy video"
+   *   download and shows the plain-language note instead (§7 publishing gate).
+   */
+  showPlayback(url, mimeType, publishingAllowed = true) {
     if (!url) return;
     this.el.reviewHeader.hidden = false;
     this.el.playback.hidden = false;
     this.el.playbackVideo.src = url;
+    this.el.downloadLink.hidden = !publishingAllowed;
+    this.el.publishNote.hidden = !!publishingAllowed;
     this.el.downloadLink.href = url;
     const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
     this.el.downloadLink.download = `dbcam-privacy-video.${ext}`;
@@ -350,6 +571,15 @@ export class UI {
     rowEl.appendChild(btn);
   }
 
+  /** In place of the export button when publishingAllowed=false. */
+  addExportBlockedNote(rowEl) {
+    if (rowEl.querySelector('.export-note')) return;
+    const note = document.createElement('span');
+    note.className = 'export-note seg-reason';
+    note.textContent = "Saving and sharing are turned off by this location's privacy rules.";
+    rowEl.appendChild(note);
+  }
+
   /** Play the raw recording clamped to [startSec, endSec]. */
   playRawWindow(url, startSec, endSec, label) {
     this.el.rawPlayerWrap.hidden = false;
@@ -404,10 +634,14 @@ export class UI {
       info.className = 'segment-info';
       const when = new Date(item.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
       const n = item.alertsCount || 0;
+      const overrideTag = item.policy && item.policy.isOverride
+        ? '<span class="tag-badge locked override-tag" title="Recorded under a user override of the location-based rules">Override</span>'
+        : '';
       info.innerHTML =
         `<span class="seg-idx">${escapeHtml(when)}</span>` +
         `<span class="seg-window">${fmt(item.durationMs / 1000)}</span>` +
-        `<span class="seg-reason">${n} alert${n === 1 ? '' : 's'}</span>`;
+        `<span class="seg-reason">${n} alert${n === 1 ? '' : 's'}</span>` +
+        overrideTag;
       li.appendChild(info);
 
       const actions = document.createElement('div');
@@ -447,6 +681,54 @@ export class UI {
 
   clearOverlay() {
     this.overlayCtx.clearRect(0, 0, this.el.overlay.width, this.el.overlay.height);
+  }
+}
+
+/**
+ * Plain-words sentence for ONE changed policy field ({field, from, to} from
+ * Core profileDiff). Covers every PROFILE_POLICY_FIELDS entry in BOTH
+ * directions — the Core computes the facts, this renders the words.
+ * @param {{field:string, from:*, to:*}} change
+ * @returns {string}
+ */
+export function describePolicyChange({ field, from, to }) {
+  switch (field) {
+    case 'recordingAllowed':
+      return to
+        ? 'Recording will become available.'
+        : 'Recording will no longer be available.';
+    case 'rawRetention':
+      return to === 'sealed'
+        ? 'The original (unblurred) video will now be kept, locked, on this device.'
+        : 'The original (unblurred) video will no longer be kept.';
+    case 'audioCapture':
+      return to
+        ? 'The microphone will be turned on — sound will be recorded.'
+        : 'The microphone will be turned off — no sound will be recorded.';
+    case 'audioTriggerAllowed':
+      return to
+        ? 'Sound-based alerts will become available.'
+        : 'Sound-based alerts will be turned off.';
+    case 'blurMode':
+      return to === 'facesAndBodies'
+        ? 'Faces and whole bodies will be hidden in the video.'
+        : 'Only faces will be hidden — bodies will be visible.';
+    case 'retentionDays':
+      return `Recordings will now be deleted after ${to} day${to === 1 ? '' : 's'} instead of ${from}.`;
+    case 'requiresVisibleIndicator':
+      return to
+        ? 'The visible recording indicator will always be shown.'
+        : 'The visible recording indicator will no longer be required.';
+    case 'noticeText':
+      return to
+        ? 'A recording notice will be shown while you record.'
+        : 'The recording notice will no longer be shown.';
+    case 'publishingAllowed':
+      return to
+        ? 'Saving and sharing recordings will be allowed.'
+        : 'Saving and sharing recordings will be turned off.';
+    default:
+      return `${field}: ${String(from)} → ${String(to)}`;
   }
 }
 

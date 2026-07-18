@@ -102,6 +102,7 @@ export async function listSessions() {
       alertsCount: r.alertsCount,
       version: r.version,
       profile: r.profile,
+      policy: r.policy || null, // ResolvedPolicy snapshot (drives the Override tag)
       hasRaw: !!r.raw,
     });
   });

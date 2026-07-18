@@ -7,13 +7,19 @@
 //     -> pixelate faces onto the visible canvas (faceBlur, fail-safe)  <- preview is BLURRED
 //     -> estimate animal approach -> deterrent + early incident
 //     -> record the BLURRED canvas (default, freely viewable)
-//   In parallel, when the policy profile is `raw-sealed`, the UNBLURRED camera feed
-//   is recorded continuously ("raw exists but is sealed", §1). It is NEVER shown live;
-//   after Stop, each incident becomes a sealed segment that requires authorized unseal
-//   (Evidence Sealer + Store + Review UI + Audit Log).
+//   In parallel, when the policy profile keeps raw sealed, the UNBLURRED camera
+//   feed is recorded continuously ("raw exists but is sealed", §1). It is NEVER
+//   shown live; after Stop, each incident becomes a sealed segment that requires
+//   authorized unseal (Evidence Sealer + Store + Review UI + Audit Log).
+//
+// §6/§7 Jurisdiction policy: the Core PolicyEngine v2 resolves the governing
+// profile (admin pin > user override > GPS > manual choice > fail-safe default).
+// This file is a THIN ADAPTER: it loads the bundled ruleset/geo data, forwards
+// location fixes and user choices, and mechanically obeys the resolved profile.
+// No thresholds, no rules, no per-jurisdiction strings live here.
 
 import { CONFIG } from './config.js';
-import { PolicyEngine, listRegions } from './policyEngine.js';
+import { PolicyEngine, compareStrictness, OVERRIDE_TTL_MS } from './policyEngine.js';
 import { CaptureLayer } from './captureLayer.js';
 import { Detection } from './detection.js';
 import { FaceBlur } from './faceBlur.js';
@@ -29,13 +35,16 @@ import { EvidenceStore } from './evidenceStore.js';
 import { SessionController } from './sessionController.js';
 import { AuditLog } from './auditLog.js';
 import { saveSession, listSessions, getSession, deleteSession, purgeOlderThan } from './storageStore.js';
-import { UI } from './ui.js';
+import { UI, describePolicyChange } from './ui.js';
 import { buildManifest, summarize } from '../../core/src/capabilities.js';
 
 // Offline support (self-contained after first load; ARCHITECTURE §0).
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
+
+// Debug hooks for the smoke tests (assert on storage/behavior, not intent).
+window.__dbcamDebug = { rawRecorderStarted: false, policyReady: false };
 
 // WEB capability report (ARCHITECTURE §5) — honest about this platform's limits.
 const CAPABILITIES = buildManifest({
@@ -50,6 +59,7 @@ const CAPABILITIES = buildManifest({
   },
   deterrent: { supported: !!(window.AudioContext || window.webkitAudioContext) },
   motionSensor: { supported: MotionSensor.isSupported() },
+  location: { supported: 'geolocation' in navigator },
   rawRecording: { supported: !!window.MediaRecorder },
   secureSealing: { supported: false, reason: 'no hardware keystore in the browser' },
   backgroundSafe: { supported: false, reason: 'browser suspends hidden tabs' },
@@ -59,7 +69,7 @@ const ui = new UI();
 
 // Long-lived singletons.
 const auditLog = new AuditLog();
-const policy = new PolicyEngine(); // resolves from the Core region table; defaults to the 'unknown' fail-safe
+const engine = new PolicyEngine(); // governs on its built-in fail-safe until the ruleset loads
 const deterrentSound = new DeterrentSound();
 const animalDeterrent = new AnimalDeterrent();
 const audioMonitor = new AudioMonitor();
@@ -68,6 +78,21 @@ const VOICE_LS = 'dbcam.voice';
 const motionSensor = new MotionSensor();
 const MOTION_LS = 'dbcam.motion';
 let motionDetector = null; // session-scoped Core detector (recreated on Start)
+
+// §6 policy persistence keys.
+const LOCMODE_LS = 'dbcam.locationMode';
+const MANUAL_LS = 'dbcam.manualJurisdiction';
+const OVERRIDE_SS = 'dbcam.override'; // sessionStorage: override dies with the app
+const DATA_BASE = './../core/data/'; // relative to /web-poc/ -> /core/data/
+
+// Policy state (all DECISIONS live in the Core engine; this is display/wiring state).
+let locationMode = 'auto';
+let manualJurisdiction = null;
+let locationUnavailable = false; // geolocation denied/unavailable in auto mode
+let usingBuiltInRules = false;   // ruleset fetch/load failed -> engine failsafe
+let overrideUiOpen = false;      // the override toggle is on (picker visible)
+let currentResolved = null;      // last ResolvedPolicy render (idle display)
+let blockedStatusShown = false;  // status line currently shows the blocked message
 
 // Per-session objects (recreated on Start).
 let capture = null;
@@ -80,7 +105,10 @@ let rawRecorder = null;
 let evidence = null;
 let recorderStartMs = 0;
 let sessionStartMs = 0;
-let activeProfile = null;
+let activePolicy = null;       // the CURRENT governing ResolvedPolicy (may tighten mid-session)
+let sessionStartPolicy = null; // the snapshot taken at Start (saved with the recording)
+let policyChanges = [];        // [{tMs, fromProfileId, toProfileId}] segment-boundary markers
+let audioMonitorOn = false;
 
 let running = false;
 let rafId = 0;
@@ -88,46 +116,423 @@ let frameCount = 0;
 let lastFrameTs = 0;
 let lastFaceResult = { boxes: [], maxScore: 0, ok: false };
 let lastAnimals = [];
+let lastPersons = [];
+
+const nowIso = () => new Date().toISOString();
+const rawModeFor = (profile) => (profile.rawRetention === 'sealed' ? 'raw-sealed' : 'blur-at-capture');
 
 ui.onSensitivity((v) => animalDeterrent.setSensitivity(v));
 ui.setVersion(CONFIG.version);
 ui.setStatus('Ready. Tap the red button to start.');
 
-// §7 region selection — restore the user's pick; with nothing stored the Core
-// fails safe to the strictest rules ('unknown'). The rules themselves live in
-// the Core policy table — this file only stores and forwards the chosen id.
-const REGION_LS = 'dbcam.region';
-const REGION_HINT_LS = 'dbcam.regionHintDismissed';
-let storedRegion = null;
-try { storedRegion = JSON.parse(localStorage.getItem(REGION_LS)); } catch (_e) {}
-policy.setRegion(typeof storedRegion === 'string' ? storedRegion : 'unknown');
-ui.populateRegions(listRegions(), policy.getProfile().regionId);
-ui.showProfile(policy.getProfile());
+// ===== §6 Jurisdiction policy layer =====
 
-// First-run nudge: shown until a region is chosen or the tip is dismissed.
-let regionHintDismissed = false;
-try { regionHintDismissed = localStorage.getItem(REGION_HINT_LS) === '1'; } catch (_e) {}
-ui.showRegionHint(!storedRegion && !regionHintDismissed);
-ui.onRegionHintClose(() => {
-  ui.showRegionHint(false);
-  try { localStorage.setItem(REGION_HINT_LS, '1'); } catch (_e) {}
+/** Drain the engine's queued events into the audit log, verbatim. */
+function drainPolicyEvents() {
+  const events = engine.takeEvents();
+  const t = performance.now();
+  for (const ev of events) {
+    const { type, ...detail } = ev;
+    auditLog.append(type, detail, t);
+    if (
+      type === 'override-expired' ||
+      type === 'override-invalidated-jurisdiction-change' ||
+      type === 'override-invalidated-ruleset-change'
+    ) {
+      try { sessionStorage.removeItem(OVERRIDE_SS); } catch (_e) {}
+    }
+  }
+  return events;
+}
+
+const SOURCE_LABELS = {
+  gps: 'Automatic (GPS)',
+  manualSelection: 'Chosen manually',
+  userOverride: 'Override',
+  adminConfig: 'Organisation setting',
+  default: 'Standard rules',
+};
+const CONFIDENCE_LABELS = { high: 'High', low: 'Low', unknown: 'Unknown' };
+
+/** "Spain (ES)" from a jurisdiction code, purely from engine data. */
+function jurisdictionLabel(code) {
+  if (!code) return 'Unknown';
+  const j = engine.listJurisdictions().find((x) => x.code === code);
+  return j ? `${j.displayName} (${j.code})` : code;
+}
+
+function rulesetLine() {
+  const info = engine.getRulesetInfo();
+  const updated = info.updatedAt ? new Date(info.updatedAt).toLocaleDateString() : '—';
+  return `Rules version ${info.version} · updated ${updated} · ${info.authoredBy || '—'}`;
+}
+
+function fmtRemaining(ms) {
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+/** Re-render everything policy-related from the engine's current resolution. */
+function renderPolicy() {
+  const t = performance.now();
+  const resolved = engine.getResolved({ nowMs: t, nowIso: nowIso() });
+  currentResolved = resolved;
+  const p = resolved.profile;
+
+  let note = null;
+  if (usingBuiltInRules) note = 'Using built-in safety rules';
+  else if (locationMode === 'auto' && locationUnavailable) note = 'Location unavailable — using strictest rules';
+
+  ui.renderPolicyStatus({
+    locationLabel: jurisdictionLabel(resolved.jurisdictionCode),
+    profileName: p.displayName,
+    sourceLabel: SOURCE_LABELS[resolved.source] || resolved.source,
+    confidenceLabel: CONFIDENCE_LABELS[resolved.confidence] || resolved.confidence,
+    note,
+  });
+  ui.showBlockedCard(p.recordingAllowed ? null : p.displayName);
+  ui.setRecordingAllowed(p.recordingAllowed);
+  ui.renderRulesList(p);
+  ui.renderWhyRules(p, rulesetLine());
+  ui.setRulesetInfo(rulesetLine());
+
+  // Idle pills reflect the live resolution; during a session they show the
+  // session's own (possibly tightened) snapshot instead.
+  if (!running) {
+    ui.showProfile(p);
+    ui.setVisibleIndicator(p.requiresVisibleIndicator);
+    applyVoice();
+    // Keep the status line honest when recording is blocked here.
+    if (!p.recordingAllowed && !blockedStatusShown) {
+      ui.setStatus('Recording is not available at this location.');
+      blockedStatusShown = true;
+    } else if (p.recordingAllowed && blockedStatusShown) {
+      ui.setStatus('Ready. Tap the red button to start.');
+      blockedStatusShown = false;
+    }
+  }
+
+  const st = engine.getOverrideStatus({ nowMs: t });
+  if (st.active) {
+    const prof = engine.getProfileById(st.profileId);
+    const name = prof ? prof.displayName : st.profileId;
+    ui.showOverrideBanner(`Override active — ${name} · expires in ${fmtRemaining(st.remainingMs)}`);
+    ui.setOverrideChecked(true);
+    ui.showOverridePicker(true);
+  } else {
+    ui.showOverrideBanner(null);
+    ui.setOverrideChecked(overrideUiOpen);
+    ui.showOverridePicker(overrideUiOpen);
+  }
+}
+
+/**
+ * One GPS refresh (auto mode only). Denied/unavailable -> the engine simply
+ * keeps fail-safing; we only reflect it in the status card.
+ * @returns {Promise<boolean>} whether a fix was delivered to the engine
+ */
+function refreshLocation() {
+  return new Promise((resolve) => {
+    if (locationMode !== 'auto') return resolve(false);
+    if (!('geolocation' in navigator)) { locationUnavailable = true; return resolve(false); }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        locationUnavailable = false;
+        engine.updateLocation({
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          accuracyM: pos.coords.accuracy,
+          ageMs: 0,
+          nowMs: performance.now(),
+        });
+        drainPolicyEvents();
+        resolve(true);
+      },
+      () => { locationUnavailable = true; resolve(false); },
+      { enableHighAccuracy: false, maximumAge: 60000, timeout: 10000 },
+    );
+  });
+}
+
+function persistOverride(profileId, ackIso, jurisdictionCode) {
+  try {
+    sessionStorage.setItem(OVERRIDE_SS, JSON.stringify({
+      profileId, ackIso, activatedAtEpochMs: Date.now(), jurisdictionCode,
+    }));
+  } catch (_e) {}
+}
+
+/** Re-apply a persisted override on load (or discard it if it aged out). */
+function restoreOverride() {
+  let saved = null;
+  try { saved = JSON.parse(sessionStorage.getItem(OVERRIDE_SS)); } catch (_e) {}
+  if (!saved || typeof saved.profileId !== 'string') return;
+  const age = Date.now() - (saved.activatedAtEpochMs || 0);
+  if (!Number.isFinite(age) || age < 0 || age >= OVERRIDE_TTL_MS) {
+    try { sessionStorage.removeItem(OVERRIDE_SS); } catch (_e) {}
+    auditLog.append('override-expired', { profileId: saved.profileId }, performance.now());
+    return;
+  }
+  // Backdate the activation so the 24h expiry stays anchored to the ORIGINAL
+  // activation time, not the reload time.
+  const res = engine.confirmOverride(saved.profileId, {
+    nowMs: performance.now() - age,
+    ackIso: saved.ackIso || undefined,
+  });
+  drainPolicyEvents();
+  if (res.ok) {
+    overrideUiOpen = true;
+    populateOverridePicker();
+    auditLog.append('override-restored', {
+      profileId: saved.profileId, ackIso: saved.ackIso || null, jurisdictionCode: saved.jurisdictionCode || null,
+    }, performance.now());
+  } else {
+    try { sessionStorage.removeItem(OVERRIDE_SS); } catch (_e) {}
+  }
+}
+
+/** Fill the override profile picker with strictness hints vs the auto profile. */
+function populateOverridePicker() {
+  const t = performance.now();
+  const auto = engine.requestOverride('__probe__', { nowMs: t }).autoProfile;
+  const options = engine.listProfiles().map((p) => {
+    let hint;
+    if (p.id === auto.id) hint = 'current rules';
+    else {
+      const cmp = compareStrictness(p, auto);
+      hint = cmp < 0 ? 'stricter' : cmp > 0 ? 'less strict' : 'same strictness';
+    }
+    return { id: p.id, label: `${p.displayName} — ${hint}` };
+  });
+  const st = engine.getOverrideStatus({ nowMs: t });
+  ui.populateOverrideProfiles(options, st.active ? st.profileId : null);
+}
+
+/** The user picked a profile in the override picker. */
+function applyOverridePick(profileId) {
+  const t = performance.now();
+  const req = engine.requestOverride(profileId, { nowMs: t });
+
+  if (req.tier === 'blocked') {
+    ui.setOverrideMessage("The rules for this location can't be loosened here.");
+    ui.resetOverridePick();
+    return;
+  }
+  ui.setOverrideMessage(null);
+
+  if (req.tier === 'tighten') {
+    // Stricter than the location's own rules -> applies silently.
+    const res = engine.confirmOverride(profileId, { nowMs: t });
+    drainPolicyEvents();
+    if (res.ok) {
+      auditLog.append('override-enabled', {
+        fromProfileId: req.autoProfile.id,
+        toProfileId: profileId,
+        jurisdictionCode: res.override.jurisdictionCodeAtActivation,
+        ackIso: null,
+      }, t);
+      persistOverride(profileId, null, res.override.jurisdictionCodeAtActivation);
+    }
+    renderPolicy();
+    return;
+  }
+
+  // tier 'loosen' -> explicit acknowledgment via the modal.
+  const detectedCode = currentResolved ? currentResolved.jurisdictionCode : null;
+  ui.openOverrideModal({
+    contextLines: [
+      `Where you are: ${jurisdictionLabel(detectedCode)}`,
+      `Rules for this location: ${req.autoProfile.displayName}`,
+      `Rules you're switching to: ${req.targetProfile.displayName}`,
+    ],
+    sentences: req.diff.map(describePolicyChange),
+    onConfirm: () => {
+      const t2 = performance.now();
+      const ack = nowIso();
+      const res = engine.confirmOverride(profileId, { nowMs: t2, ackIso: ack });
+      drainPolicyEvents();
+      if (res.ok) {
+        auditLog.append('override-enabled', {
+          fromProfileId: req.autoProfile.id,
+          toProfileId: profileId,
+          jurisdictionCode: res.override.jurisdictionCodeAtActivation,
+          ackIso: ack,
+        }, t2);
+        persistOverride(profileId, ack, res.override.jurisdictionCodeAtActivation);
+      } else {
+        ui.setOverrideMessage("The override couldn't be turned on.");
+        ui.resetOverridePick();
+      }
+      renderPolicy();
+    },
+    onCancel: () => { ui.resetOverridePick(); },
+  });
+}
+
+/** User-initiated override off (toggle or banner button). */
+function turnOffOverride() {
+  const t = performance.now();
+  const st = engine.getOverrideStatus({ nowMs: t });
+  if (st.active) auditLog.append('override-disabled', { profileId: st.profileId }, t);
+  engine.clearOverride(); // no engine event — user-initiated
+  try { sessionStorage.removeItem(OVERRIDE_SS); } catch (_e) {}
+  overrideUiOpen = false;
+  ui.resetOverridePick();
+  ui.setOverrideMessage(null);
+  renderPolicy();
+}
+
+/** [Check for updates]: refetch the bundled ruleset with a cache-bust query. */
+async function checkForUpdates() {
+  ui.setRulesetMessage('Checking…');
+  try {
+    const res = await fetch(`${DATA_BASE}ruleset.json?t=${Date.now()}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rs = await res.json();
+    const out = engine.loadRuleset(rs);
+    drainPolicyEvents();
+    if (out.ok) {
+      usingBuiltInRules = false;
+      ui.populateJurisdictions(engine.listJurisdictions(), manualJurisdiction);
+      ui.setRulesetMessage('You have the latest rules.');
+    } else {
+      ui.setRulesetMessage("The update couldn't be used — keeping the current rules.");
+    }
+  } catch (_e) {
+    ui.setRulesetMessage("Couldn't check right now — try again later.");
+  }
+  renderPolicy();
+}
+
+// --- Settings wiring ---
+
+ui.onLocationModeChange((mode) => {
+  locationMode = mode;
+  try { localStorage.setItem(LOCMODE_LS, mode); } catch (_e) {}
+  engine.setLocationMode(mode);
+  // In auto mode the engine must fail safe when GPS is unavailable — never
+  // silently fall back to a stale manual choice.
+  engine.setManualJurisdiction(mode === 'manual' ? manualJurisdiction : null);
+  ui.setLocationMode(mode);
+  drainPolicyEvents();
+  renderPolicy();
+  if (mode === 'auto') refreshLocation().then(() => renderPolicy());
 });
 
-ui.onRegionChange((regionId) => {
-  const profile = policy.setRegion(regionId);
-  try { localStorage.setItem(REGION_LS, JSON.stringify(profile.regionId)); } catch (_e) {}
-  ui.showProfile(profile);
-  ui.showRegionHint(false);
-  // A live session keeps the rules it started with — the new rules apply next time.
-  if (running) ui.setStatus('Privacy rules will apply from the next recording.');
+ui.onJurisdictionChange((code) => {
+  manualJurisdiction = code || null;
+  try { localStorage.setItem(MANUAL_LS, manualJurisdiction || ''); } catch (_e) {}
+  if (locationMode === 'manual') engine.setManualJurisdiction(manualJurisdiction);
+  drainPolicyEvents();
+  renderPolicy();
 });
 
-// Saved recordings: enforce the ACTIVE profile's retention rule (the number
-// lives in the Core policy profile, not here), then show what's kept.
-(async () => {
-  try { await purgeOlderThan(policy.getProfile().retentionSeconds * 1000); } catch (_e) {}
-  await refreshRecordings();
-})();
+ui.onRefreshLocation(async () => {
+  await refreshLocation();
+  renderPolicy();
+});
+
+ui.onOverrideToggle((on) => {
+  if (on) {
+    overrideUiOpen = true;
+    populateOverridePicker();
+    ui.setOverrideMessage(null);
+    ui.showOverridePicker(true);
+  } else {
+    turnOffOverride();
+  }
+});
+ui.onOverrideProfilePick((profileId) => applyOverridePick(profileId));
+ui.onOverrideOff(() => turnOffOverride());
+ui.onCheckUpdates(() => { checkForUpdates(); });
+
+// Periodic policy upkeep: expire overrides, and during a session re-resolve
+// location + re-evaluate the governing policy (stricter applies immediately).
+setInterval(async () => {
+  engine.tick({ nowMs: performance.now() });
+  if (running) {
+    await refreshLocation();
+    const ev = engine.evaluateSessionPolicy({ nowMs: performance.now(), nowIso: nowIso() });
+    if (ev.action === 'stop') {
+      const t = performance.now();
+      auditLog.append('policy-stop', {
+        fromProfileId: activePolicy.profile.id,
+        toProfileId: ev.newPolicy.profile.id,
+      }, t);
+      policyChanges.push({
+        tMs: Math.round(t - sessionStartMs),
+        fromProfileId: activePolicy.profile.id,
+        toProfileId: ev.newPolicy.profile.id,
+      });
+      activePolicy = ev.newPolicy;
+      // Fail-safe consistency: if the stopping profile keeps no raw, the raw
+      // recorded so far is discarded, exactly like a mid-session tighten.
+      if (rawRecorder && ev.newPolicy.profile.rawRetention !== 'sealed') {
+        const r = rawRecorder;
+        rawRecorder = null;
+        try {
+          const res = await r.stop();
+          if (res && res.url) URL.revokeObjectURL(res.url);
+        } catch (e) { console.error(e); }
+        if (evidence) evidence.setRawMode('blur-at-capture');
+      }
+      drainPolicyEvents();
+      await stop();
+    } else if (ev.action === 'tighten') {
+      await applyPolicyTighten(ev.newPolicy);
+    }
+  }
+  drainPolicyEvents();
+  renderPolicy();
+}, 60000);
+
+/**
+ * Mid-session tighten (§7): the stricter profile applies IMMEDIATELY. This is
+ * mechanical obedience — every decision came from the Core engine.
+ */
+async function applyPolicyTighten(newPolicy) {
+  const t = performance.now();
+  const from = activePolicy.profile;
+  const to = newPolicy.profile;
+  policyChanges.push({ tMs: Math.round(t - sessionStartMs), fromProfileId: from.id, toProfileId: to.id });
+  auditLog.append('policy-tighten', { fromProfileId: from.id, toProfileId: to.id }, t);
+
+  // Raw retention tightened (sealed -> blurAtCapture): stop the raw recorder
+  // AND DISCARD its data — nothing recorded under the looser rule survives.
+  if (rawRecorder && to.rawRetention !== 'sealed') {
+    const r = rawRecorder;
+    rawRecorder = null;
+    try {
+      const res = await r.stop();
+      if (res && res.url) URL.revokeObjectURL(res.url); // discard, never save
+    } catch (e) { console.error(e); }
+    if (evidence) evidence.setRawMode('blur-at-capture');
+  }
+
+  // Audio capture tightened off: stop the monitor + voice, and (best effort)
+  // kill the mic track so no recorder keeps capturing sound.
+  if (from.audioCapture && !to.audioCapture) {
+    audioMonitor.stop();
+    audioMonitorOn = false;
+    voice.stop();
+    const at = capture && capture.getAudioTrack();
+    if (at) { try { at.stop(); } catch (_e) {} }
+    ui.setSoundDisabledByPolicy();
+  } else if (audioMonitorOn && !to.audioTriggerAllowed) {
+    audioMonitor.stop();
+    audioMonitorOn = false;
+    ui.setSoundDisabledByPolicy();
+  }
+
+  activePolicy = newPolicy;
+  ui.showProfile(to);
+  ui.setVisibleIndicator(to.requiresVisibleIndicator);
+  applyVoice();
+  ui.setStatus('Privacy rules changed for this location — stricter settings applied.');
+}
+
+// ===== Voice + motion triggers =====
 
 // Restore voice-trigger settings and reflect availability.
 try { ui.setVoiceConfig(JSON.parse(localStorage.getItem(VOICE_LS) || '{}')); } catch (_e) {}
@@ -141,6 +546,17 @@ function applyVoice() {
 
   if (!VoiceTrigger.isSupported()) { ui.setVoiceStatus('unsupported'); return; }
   voice.stop();
+
+  // The safety word needs the microphone — when the governing privacy rules
+  // turn audio capture off, the trigger is unavailable (honest degradation).
+  const prof = running && activePolicy
+    ? activePolicy.profile
+    : (currentResolved ? currentResolved.profile : null);
+  if (cfg.enabled && prof && !prof.audioCapture) {
+    ui.setVoiceStatus('off — microphone disabled by privacy rules');
+    return;
+  }
+
   if (running && cfg.enabled && cfg.word) {
     voice.start(cfg.word, {
       onTrigger: () => {
@@ -234,10 +650,27 @@ async function start() {
   ui.setRunning(true);
   ui.setStatus('Getting ready…');
 
-  // §7: capture behavior is read from the policy profile, not hard-coded.
-  const profile = await policy.resolveForSession();
-  activeProfile = profile;
+  // §7: capture behavior is read from the resolved policy, not hard-coded.
+  // Refresh the location first (auto mode), then snapshot the session policy.
+  await refreshLocation();
+  engine.tick({ nowMs: performance.now() });
+  const resolved = engine.beginSession({ nowMs: performance.now(), nowIso: nowIso() });
+  drainPolicyEvents();
+  if (!resolved.profile.recordingAllowed) {
+    engine.endSession();
+    ui.setRunning(false);
+    renderPolicy();
+    ui.setStatus('Recording is not available at this location.');
+    return;
+  }
+  activePolicy = resolved;
+  sessionStartPolicy = resolved;
+  policyChanges = [];
+  const profile = resolved.profile;
   ui.showProfile(profile);
+  ui.setVisibleIndicator(profile.requiresVisibleIndicator);
+  ui.showOverrideChip(resolved.isOverride);
+  ui.showNotice(profile.noticeText != null ? profile.noticeText : null);
 
   // Prime the audio context from this user gesture (autoplay policy).
   deterrentSound.ensureContext();
@@ -249,7 +682,7 @@ async function start() {
 
   ui.setStatus('Turning on the camera…');
   capture = new CaptureLayer();
-  const info = await capture.start(profile.audioEnabled);
+  const info = await capture.start(profile.audioCapture); // mic never requested when audio is off
   ui.sizeCanvases(info.width, info.height);
 
   faceBlur = new FaceBlur(ui.el.preview);
@@ -263,12 +696,15 @@ async function start() {
   await session.start(performance.now());
   // Record this platform's capability manifest with the session (auditable honesty).
   auditLog.append('capabilities', summarize(CAPABILITIES), performance.now());
-  // Record which policy governed this session (§7): region + ruleset version.
-  auditLog.append(
-    'policy-resolved',
-    { regionId: profile.regionId, rawMode: profile.rawMode, version: profile.version },
-    performance.now(),
-  );
+  // Record which policy governs this session (§7).
+  auditLog.append('policy-resolved', {
+    profileId: resolved.profile.id,
+    source: resolved.source,
+    jurisdictionCode: resolved.jurisdictionCode,
+    confidence: resolved.confidence,
+    rulesetVersion: resolved.rulesetVersion,
+    isOverride: resolved.isOverride,
+  }, performance.now());
   ui.setWake(session.hasWakeLock());
 
   incident = new IncidentDetector({
@@ -280,7 +716,7 @@ async function start() {
   });
 
   evidence = new EvidenceStore({ auditLog });
-  evidence.setRawMode(profile.rawMode);
+  evidence.setRawMode(rawModeFor(profile)); // translate engine field -> ledger mode
 
   // Reset review UI from any prior session.
   ui.el.reviewHeader.hidden = true;
@@ -293,11 +729,11 @@ async function start() {
   ui.setRecTimer(0);
 
   // Recorders. Blurred default = the canvas. Raw sealed evidence = the camera track
-  // itself, recorded only when the policy permits retaining raw (§7).
-  const audioTrack = profile.audioEnabled ? capture.getAudioTrack() : null;
+  // itself, recorded ONLY when the policy keeps raw sealed (§7).
+  const audioTrack = profile.audioCapture ? capture.getAudioTrack() : null;
   blurredRecorder = new Recorder({ canvas: ui.el.preview });
   rawRecorder = null;
-  if (profile.rawMode === 'raw-sealed') {
+  if (profile.rawRetention === 'sealed') {
     const rawVideoTrack = capture.stream.getVideoTracks()[0];
     rawRecorder = new Recorder({ stream: new MediaStream([rawVideoTrack]) });
   }
@@ -307,17 +743,23 @@ async function start() {
   recorderStartMs = performance.now();
   if (rawRecorder) {
     rawRecorder.start(audioTrack);
+    window.__dbcamDebug.rawRecorderStarted = true;
     blurredRecorder.start(null);
   } else {
     blurredRecorder.start(audioTrack);
   }
 
   animalDeterrent.reset();
-  // Aggressive-sound detector taps the mic (only when the policy allows audio).
-  audioMonitor.start(profile.audioEnabled ? capture.getAudioTrack() : null);
+  // Aggressive-sound detector taps the mic — ONLY when the policy allows both
+  // audio capture and the sound-based trigger (§7 audioTriggerAllowed).
+  audioMonitorOn = false;
+  if (profile.audioCapture && profile.audioTriggerAllowed) {
+    audioMonitorOn = audioMonitor.start(capture.getAudioTrack());
+  }
+  if (!(profile.audioCapture && profile.audioTriggerAllowed)) ui.setSoundDisabledByPolicy();
 
   running = true;
-  applyVoice(); // begin listening for the trigger word if enabled
+  applyVoice(); // begin listening for the trigger word if enabled (and allowed)
   frameCount = 0;
   lastFrameTs = performance.now();
   const rawNote = rawRecorder
@@ -353,15 +795,23 @@ function loop() {
     lastFaceResult = detection.detectFaces(video, now);
   }
   if (frameCount % CONFIG.detection.animalEveryN === 0) {
-    lastAnimals = detection.detectAnimals(video, now);
+    // ONE detector invocation feeds both threat scoring (animals) and the
+    // policy-driven body pixelation (persons).
+    const objects = detection.detectObjects(video, now);
+    lastAnimals = objects.animals;
+    lastPersons = objects.persons;
   }
 
   // --- Blur render (fail-safe) -> visible canvas ---
-  const blurInfo = faceBlur.render(video, lastFaceResult, now);
+  // blurMode comes from the governing profile: 'facesAndBodies' also pixelates
+  // detected person boxes (§7).
+  const extraRegions = activePolicy.profile.blurMode === 'facesAndBodies' ? lastPersons : [];
+  window.__dbcamDebug.lastExtraRegions = extraRegions.length;
+  const blurInfo = faceBlur.render(video, lastFaceResult, now, extraRegions);
 
   // --- Animal threat (vision + sound) -> deterrent + early incident sealing ---
-  const audioLevel = audioMonitor.getLevel(now);
-  ui.setSoundLevel(audioLevel);
+  const audioLevel = audioMonitorOn ? audioMonitor.getLevel(now) : 0;
+  if (audioMonitorOn) ui.setSoundLevel(audioLevel);
   const threat = animalDeterrent.update(lastAnimals, capture.width, capture.height, now, audioLevel);
   if (threat.hostile) {
     // Early trigger: seal the buildup before contact (§2.2) + sound the deterrent.
@@ -408,6 +858,7 @@ async function stop() {
   applyVoice(); // reset voice status to ready/off now that we're idle
   applyMotion(); // unsubscribe the motion sensor; status back to ready/off
   audioMonitor.stop();
+  audioMonitorOn = false;
   if (incident) incident.finalize(stopMs);
 
   let blurredResult = null;
@@ -415,14 +866,19 @@ async function stop() {
   try { blurredResult = blurredRecorder ? await blurredRecorder.stop() : null; } catch (e) { console.error(e); }
   try { rawResult = rawRecorder ? await rawRecorder.stop() : null; } catch (e) { console.error(e); }
   try { await session.stop(stopMs); } catch (e) { console.error(e); }
+  engine.endSession();
   if (detection) detection.close();
   if (capture) capture.stop();
   ui.clearOverlay();
   ui.setWake(false);
   ui.setRunning(false);
+  ui.showOverrideChip(false);
+  ui.showNotice(null);
 
-  // Blurred default playback.
-  if (blurredResult) ui.showPlayback(blurredResult.url, blurredResult.mimeType);
+  const publishingAllowed = !!activePolicy.profile.publishingAllowed;
+
+  // Blurred default playback (download gated by publishingAllowed, §7).
+  if (blurredResult) ui.showPlayback(blurredResult.url, blurredResult.mimeType, publishingAllowed);
 
   // Sealed evidence review.
   evidence.setBlurred(blurredResult);
@@ -434,6 +890,7 @@ async function stop() {
     onUnseal: makeUnsealHandler({
       store: evidence,
       renderAudit: () => ui.renderAuditLog(auditLog.toJSON()),
+      publishingAllowed,
     }),
   });
   ui.renderAuditLog(auditLog.toJSON());
@@ -453,7 +910,8 @@ async function stop() {
 
   // Persist the finished session on this device so it survives a reload
   // (auto-deleted later by the profile's retention rule). Segments are stored
-  // locked — unlock state never persists.
+  // locked — unlock state never persists. The record carries the FULL resolved
+  // policy it was made under + any mid-session policy-change markers.
   if (blurredResult) {
     try {
       await saveSession({
@@ -461,7 +919,12 @@ async function stop() {
         durationMs: Math.max(0, Math.round(stopMs - sessionStartMs)),
         alertsCount: n,
         version: CONFIG.version,
-        profile: { jurisdiction: activeProfile.jurisdiction, rawMode: activeProfile.rawMode },
+        profile: {
+          jurisdiction: activePolicy.jurisdictionCode || 'unknown',
+          rawMode: rawModeFor(activePolicy.profile),
+        },
+        policy: JSON.parse(JSON.stringify(sessionStartPolicy)),
+        policyChanges: policyChanges.map((c) => ({ ...c })),
         blurred: { blob: blurredResult.blob, mimeType: blurredResult.mimeType },
         raw: rawResult ? { blob: rawResult.blob, mimeType: rawResult.mimeType } : null,
         segments,
@@ -473,15 +936,18 @@ async function stop() {
       ui.setStatus("Could not save to this device's storage.");
     }
   }
+
+  renderPolicy(); // idle pills go back to the live resolution
 }
 
 /**
  * Shared unlock-to-view handler for the evidence list (§6 rules live in the
  * Core ledger; this wires confirm dialog -> unseal -> clamped playback -> export).
  * Used by both the live session review and the saved-recording review.
- * @param {{store: EvidenceStore, renderAudit: ()=>void, afterChange?: ()=>Promise<void>}} deps
+ * @param {{store: EvidenceStore, renderAudit: ()=>void, publishingAllowed:boolean,
+ *          afterChange?: ()=>Promise<void>}} deps
  */
-function makeUnsealHandler({ store, renderAudit, afterChange }) {
+function makeUnsealHandler({ store, renderAudit, publishingAllowed, afterChange }) {
   return async (seg, rowEl) => {
     const ok = window.confirm(
       `Unlock Alert ${seg.index} (${ui.formatReasons(seg.reasons)})?\n\n` +
@@ -491,19 +957,24 @@ function makeUnsealHandler({ store, renderAudit, afterChange }) {
     const win = await store.unseal(seg, performance.now());
     if (!win) return;
     ui.markSegmentUnsealed(rowEl);
-    // Export is only offered once unsealed; every export is audit-logged (§6).
-    ui.addExportButton(rowEl, async () => {
-      const exp = await store.exportRaw(seg, performance.now());
-      if (!exp) return;
-      const a = document.createElement('a');
-      a.href = exp.url;
-      a.download = exp.filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      renderAudit();
-      if (afterChange) await afterChange();
-    });
+    if (publishingAllowed) {
+      // Export is only offered once unsealed; every export is audit-logged (§6).
+      ui.addExportButton(rowEl, async () => {
+        const exp = await store.exportRaw(seg, performance.now());
+        if (!exp) return;
+        const a = document.createElement('a');
+        a.href = exp.url;
+        a.download = exp.filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        renderAudit();
+        if (afterChange) await afterChange();
+      });
+    } else {
+      // §7 publishingAllowed=false: no export — viewing stays possible.
+      ui.addExportBlockedNote(rowEl);
+    }
     ui.playRawWindow(win.url, win.startSec, win.endSec, `Alert ${seg.index} — ${ui.formatReasons(seg.reasons)}`);
     renderAudit();
     if (afterChange) await afterChange();
@@ -565,8 +1036,14 @@ async function watchRecording(id) {
   const lastEntry = baseEntries[baseEntries.length - 1];
   if (lastEntry) { reviewAudit._seq = lastEntry.seq; reviewAudit._lastHash = lastEntry.hash; }
 
+  // The recording is reviewed under the policy IT WAS MADE UNDER (stored with
+  // the record). Records without a policy snapshot fail safe: no publishing.
+  const rawMode = (rec.profile && rec.profile.rawMode) ||
+    (rec.policy && rec.policy.profile.rawRetention === 'sealed' ? 'raw-sealed' : 'blur-at-capture');
+  const publishingAllowed = !!(rec.policy && rec.policy.profile.publishingAllowed);
+
   const store = new EvidenceStore({ auditLog: reviewAudit });
-  store.setRawMode(rec.profile.rawMode);
+  store.setRawMode(rawMode);
   store.setBlurred(blurred);
   store.setRaw(raw);
   // Segments start locked again every time — by design.
@@ -582,14 +1059,70 @@ async function watchRecording(id) {
     } catch (e) { console.error(e); }
   };
 
-  if (blurred) ui.showPlayback(blurred.url, blurred.mimeType);
+  if (blurred) ui.showPlayback(blurred.url, blurred.mimeType, publishingAllowed);
   ui.renderEvidence(segments, {
     hasRaw: store.hasRaw(),
     prerollSeconds: CONFIG.incident.prerollSeconds,
-    onUnseal: makeUnsealHandler({ store, renderAudit, afterChange: persist }),
+    onUnseal: makeUnsealHandler({ store, renderAudit, publishingAllowed, afterChange: persist }),
   });
   renderAudit();
   ui.setSessionState('review');
   ui.setStatus('Showing a saved recording — it is below.');
   ui.el.reviewHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+
+// ===== Bootstrap =====
+
+(async () => {
+  // Old-model leftovers: the region picker is gone — drop its keys silently.
+  try {
+    localStorage.removeItem('dbcam.region');
+    localStorage.removeItem('dbcam.regionHintDismissed');
+  } catch (_e) {}
+
+  // Restore persisted location settings.
+  try {
+    const m = localStorage.getItem(LOCMODE_LS);
+    if (m === 'auto' || m === 'manual') locationMode = m;
+    const j = localStorage.getItem(MANUAL_LS);
+    if (j) manualJurisdiction = j;
+  } catch (_e) {}
+  ui.setLocationMode(locationMode);
+
+  // Load the bundled ruleset + geo bounds (the CLIENT does the I/O; the Core
+  // is pure). Any failure leaves the engine on its built-in fail-safe.
+  try {
+    const [rsRes, gbRes] = await Promise.all([
+      fetch(`${DATA_BASE}ruleset.json`),
+      fetch(`${DATA_BASE}geo-bounds.json`),
+    ]);
+    if (!rsRes.ok || !gbRes.ok) throw new Error('policy data fetch failed');
+    const [rs, gb] = await Promise.all([rsRes.json(), gbRes.json()]);
+    engine.setGeoBounds(gb);
+    const out = engine.loadRuleset(rs);
+    if (!out.ok) usingBuiltInRules = true;
+  } catch (_e) {
+    usingBuiltInRules = true;
+  }
+  drainPolicyEvents();
+
+  // Feed the engine the restored inputs (after the ruleset, so codes resolve).
+  engine.setLocationMode(locationMode);
+  engine.setManualJurisdiction(locationMode === 'manual' ? manualJurisdiction : null);
+  ui.populateJurisdictions(engine.listJurisdictions(), manualJurisdiction);
+  drainPolicyEvents();
+
+  // Re-apply a persisted override (sessionStorage — dies with the app; 24h cap).
+  restoreOverride();
+
+  // First location fix (auto mode; denial just fail-safes).
+  await refreshLocation();
+  renderPolicy();
+
+  // Saved recordings: enforce the ACTIVE profile's retention rule (the number
+  // lives in the policy profile, not here), then show what's kept.
+  try { await purgeOlderThan(currentResolved.profile.retentionDays * 86400 * 1000); } catch (_e) {}
+  await refreshRecordings();
+
+  window.__dbcamDebug.policyReady = true;
+})();

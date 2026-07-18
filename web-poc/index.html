@@ -44,7 +44,12 @@
 
         <div class="stage-top">
           <div id="recIndicator" class="rec"><span class="rec-dot"></span>REC <span id="recTimer">0:00</span></div>
+          <div id="overrideChip" class="override-chip" hidden>Override active</div>
           <div class="privacy-badge"><span class="shield">🛡</span> Faces hidden</div>
+        </div>
+        <div id="noticeStrip" class="notice-strip" hidden>
+          <span id="noticeStripText"></span>
+          <button id="noticeStripClose" class="region-hint-close" aria-label="Dismiss notice">✕</button>
         </div>
         <div id="fps" class="fps-chip">— fps</div>
         <div id="incidentBanner" class="incident-banner"></div>
@@ -67,11 +72,10 @@
         </div>
       </div>
 
-      <div id="profileBanner" class="profile-bar">Jurisdiction: —</div>
-      <div id="regionHint" class="region-hint" hidden>
-        <span>Tip: choose where you are in Settings so the right privacy rules apply.
-          Until then the strictest rules are used.</span>
-        <button id="regionHintClose" class="region-hint-close" aria-label="Dismiss tip">✕</button>
+      <div id="profileBanner" class="profile-bar">Privacy rules: —</div>
+      <div id="policyBlockedCard" class="blocked-card" hidden>
+        <strong>Recording is not available at this location</strong>
+        <span id="policyBlockedProfile"></span>
       </div>
 
       <div class="controls">
@@ -106,10 +110,59 @@
     <details class="sheet">
       <summary>Settings</summary>
       <div class="sheet-body">
-        <label class="region-row">
-          <span class="slider-label">Where are you? This sets the privacy rules.</span>
-          <select id="regionSelect" class="text-input"></select>
-        </label>
+        <!-- ===== Location & privacy rules (§6) ===== -->
+        <div class="policy-status" id="policyStatusCard">
+          <div class="policy-line"><span class="policy-key">Detected location</span><span id="policyLocation">—</span></div>
+          <div class="policy-line"><span class="policy-key">Active rules</span><span id="policyProfileName">—</span></div>
+          <div class="policy-line"><span class="policy-key">Source</span><span id="policySource">—</span></div>
+          <div class="policy-line"><span class="policy-key">Confidence</span><span id="policyConfidence">—</span></div>
+          <p id="policyStatusNote" class="fine policy-note" hidden></p>
+          <button id="refreshLocationBtn" class="btn small">Refresh location</button>
+        </div>
+
+        <div class="setting-block">
+          <span class="slider-label">What the rules here mean</span>
+          <ul id="rulesList" class="rules-list"></ul>
+          <details id="whyRules" class="why-rules">
+            <summary>Why these rules?</summary>
+            <p id="rulesNotes" class="fine"></p>
+            <p id="rulesVersionNote" class="fine"></p>
+          </details>
+        </div>
+
+        <div class="setting-block">
+          <span class="slider-label">How the app finds your location rules</span>
+          <label class="switch-row radio-row">
+            <input type="radio" name="locMode" id="locModeAuto" value="auto" checked />
+            <span>Automatic (use my location)</span>
+          </label>
+          <label class="switch-row radio-row">
+            <input type="radio" name="locMode" id="locModeManual" value="manual" />
+            <span>Choose manually</span>
+          </label>
+          <select id="jurisdictionSelect" class="text-input" hidden></select>
+        </div>
+
+        <div class="setting-block">
+          <label class="switch-row">
+            <input type="checkbox" id="overrideEnable" />
+            <span>Override location-based rules</span>
+          </label>
+          <p class="fine">Use a different set of privacy rules than the ones for your location.
+             Loosening the rules asks for your explicit confirmation and is recorded.</p>
+          <select id="overrideProfileSelect" class="text-input" hidden></select>
+          <p id="overrideMsg" class="fine" hidden></p>
+          <div id="overrideBanner" class="override-banner" hidden>
+            <span id="overrideBannerText"></span>
+            <button id="overrideOffBtn" class="btn small">Turn off</button>
+          </div>
+        </div>
+
+        <div class="setting-block ruleset-row">
+          <span id="rulesetInfo" class="fine">Rules version —</span>
+          <button id="checkUpdatesBtn" class="btn small">Check for updates</button>
+          <span id="rulesetMsg" class="fine" hidden></span>
+        </div>
 
         <label class="slider setting-block">
           <span class="slider-label">Animal alert sensitivity <span id="sensitivityVal">50%</span></span>
@@ -160,6 +213,7 @@
       </div>
       <video id="playbackVideo" controls playsinline></video>
       <a id="downloadLink" class="btn ghost" download>Save privacy video</a>
+      <p id="publishNote" class="fine" hidden>Saving and sharing are turned off by this location's privacy rules.</p>
     </section>
 
     <section id="evidence" class="review-card" hidden>
@@ -205,9 +259,11 @@
           <li><strong>Cryptographic sealing / split-key authorization</strong> — the flow is
             demonstrated, but "authorization" is a UI gate and playback is only clamped, not
             cryptographically sealed.</li>
-          <li><strong>Jurisdiction enforcement</strong> — the region rules are demo values (not
-            legal advice) and there is no automatic location detection yet; you choose the
-            region in Settings, and until you do the strictest rules apply.</li>
+          <li><strong>Verified legal rules</strong> — the app now detects where you are (GPS or
+            your manual choice in Settings) and applies location-based privacy rules from a
+            bundled, versioned rules file. Those rules are <strong>DRAFT research, not checked
+            by a lawyer</strong> and not legal advice; when your location is unknown the
+            strictest rules apply.</li>
         </ul>
         <p class="fine">These guarantees are <strong>native-only</strong> (iOS Vision/CryptoKit,
           Android ML Kit/Keystore). The animal deterrent <strong>may help avoid, definitely helps
@@ -215,6 +271,28 @@
       </div>
     </details>
   </main>
+
+  <!-- ===== Override confirmation modal (loosening only) ===== -->
+  <div id="overrideModal" class="modal-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ovmTitle">
+      <h3 id="ovmTitle">You're overriding location-based privacy rules</h3>
+      <p id="ovmContext" class="modal-context"></p>
+      <ul id="ovmChanges" class="modal-changes"></ul>
+      <p class="fine">Privacy and recording rules vary by location. Using settings that don't
+         match where you are may be unlawful and may expose you to civil or criminal
+         liability. The app cannot check whether this is legal — this is not legal advice.</p>
+      <p class="fine">This override and its time will be recorded in the activity log, and
+         video recorded under it is marked.</p>
+      <label class="switch-row modal-ack">
+        <input type="checkbox" id="ovmAck" />
+        <span>I understand and accept responsibility</span>
+      </label>
+      <div class="modal-actions">
+        <button id="ovmCancel" class="btn primary">Cancel</button>
+        <button id="ovmConfirm" class="btn" disabled>Enable override</button>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="js/main.js"></script>
 </body>

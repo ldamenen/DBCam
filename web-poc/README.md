@@ -82,8 +82,20 @@ Press **Stop** to get the review:
 - **Audit log** — append-only, hash-chained; every incident open/close and every
   raw unseal is recorded.
 
-The raw is only recorded when the active policy profile is `raw-sealed`; a
-`blur-at-capture` profile retains no raw at all (§7).
+**Privacy rules (jurisdiction policy, §6–§7):** the Core PolicyEngine v2 resolves
+the governing profile from bundled, versioned data (`core/data/ruleset.json` +
+`core/data/geo-bounds.json`) with precedence admin pin > user override > GPS >
+manual choice > fail-safe default (strictest). Settings shows the detected
+location, the active rules in plain language, a manual location picker, and an
+"Override location-based rules" flow — loosening requires an explicit
+acknowledged confirmation, expires after 24 h (and on app termination), and is
+audit-logged; recordings made under an override are marked. The resolved profile
+drives everything mechanically: recording availability, raw retention (raw is
+only recorded when the profile keeps it `sealed`; `blurAtCapture` retains no raw
+at all), microphone + sound-based alerts, blur mode (faces / faces-and-bodies),
+retention days, the visible indicator, notice text, and save/share availability.
+The ruleset is **DRAFT legal research, not counsel-verified, and not legal
+advice**; mid-session rule changes only ever tighten, never loosen.
 
 ## What maps to what
 
@@ -103,7 +115,7 @@ reads the same across the web PoC and the future iOS/Android apps:
 | `recorder.js` | Encrypted Store (both layers) | Records the **blurred canvas** (default) and, in parallel, the **raw camera feed** (sealed). |
 | `evidenceStore.js` | Evidence Sealer + Store | Builds sealed segments (with pre-roll) from incidents; gates authorized unseal. |
 | `sessionController.js` | Session Controller | Screen Wake Lock + interruption **gap markers**. |
-| `policyEngine.js` | Jurisdiction Policy Engine (§7) | **Injectable stub**; capture + raw-retention read from the profile. |
+| `policyEngine.js` | Jurisdiction Policy Engine (§7) | Shim over the Core **PolicyEngine v2** (GPS/manual/override resolution; the client only loads the data files and forwards inputs). |
 | `auditLog.js` | Audit Log | Append-only, hash-chained; logs incidents + every raw unseal. |
 | `ui.js` | Review/Download UI | Overlays, FPS, banners, blurred playback, sealed-evidence review, audit view. |
 
@@ -120,8 +132,9 @@ Per §11.2, this PoC deliberately does **not** provide:
   authorized unseal + audit log), but "authorization" is a UI confirm, not a
   split-key/approver control, and playback is only *clamped* to the window rather
   than cryptographically sealed.
-- **Jurisdiction enforcement** — the Policy Engine is a static injectable stub (it
-  does drive raw-retention on/off, but does not resolve or enforce real law).
+- **Verified legal rules** — jurisdiction resolution (GPS + data-driven rules) and
+  enforcement are real, but the bundled ruleset is DRAFT research pending counsel
+  review; the app cannot verify legality and shows that honestly.
 
 ## Where browser limitations bite
 

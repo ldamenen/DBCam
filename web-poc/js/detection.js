@@ -109,28 +109,44 @@ export class Detection {
   }
 
   /**
-   * @returns {Array<{x,y,w,h,score,label}>} animal detections in video pixels.
+   * ONE object-detector invocation, two result sets:
+   *  - animals: detections matching CONFIG.animals.classes (threat scoring)
+   *  - persons: detections labeled 'person' (body pixelation when the active
+   *    policy profile's blurMode is 'facesAndBodies')
+   * @returns {{animals: Array<{x,y,w,h,score,label}>, persons: Array<{x,y,w,h,score,label}>}}
    */
-  detectAnimals(video, tsMs) {
-    if (!this.ready) return [];
+  detectObjects(video, tsMs) {
+    if (!this.ready) return { animals: [], persons: [] };
     const ts = this._nextTs(tsMs);
     let res;
     try {
       res = this.objectDetector.detectForVideo(video, ts);
     } catch (_e) {
-      return [];
+      return { animals: [], persons: [] };
     }
-    const out = [];
+    const animals = [];
+    const persons = [];
     for (const d of res.detections || []) {
       const cat = d.categories && d.categories[0];
       if (!cat) continue;
       const label = (cat.categoryName || '').toLowerCase();
-      if (!CONFIG.animals.classes.includes(label)) continue;
       if (cat.score < CONFIG.detection.animalMinConfidence) continue;
       const bb = d.boundingBox;
-      out.push({ x: bb.originX, y: bb.originY, w: bb.width, h: bb.height, score: cat.score, label });
+      const box = { x: bb.originX, y: bb.originY, w: bb.width, h: bb.height, score: cat.score, label };
+      if (label === 'person') persons.push(box);
+      else if (CONFIG.animals.classes.includes(label)) animals.push(box);
     }
-    return out;
+    return { animals, persons };
+  }
+
+  /** @returns {Array<{x,y,w,h,score,label}>} animal detections in video pixels. */
+  detectAnimals(video, tsMs) {
+    return this.detectObjects(video, tsMs).animals;
+  }
+
+  /** @returns {Array<{x,y,w,h,score,label}>} person detections in video pixels. */
+  detectPersons(video, tsMs) {
+    return this.detectObjects(video, tsMs).persons;
   }
 
   close() {

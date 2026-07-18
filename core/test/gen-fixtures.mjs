@@ -141,51 +141,65 @@ const evidenceSegments = {
   ],
 };
 
-// ---- Jurisdiction policy (§7) ----
-// Expected values are written out BY HAND here (not read from the table), so an
-// accidental edit to POLICY_RULESET fails conformance. Demo values only — the
-// table must be reviewed by counsel before real deployment.
-const DAY = 86400;
-const policyRegions = {
+// ---- Jurisdiction policy v2 (§7): engine-level scenarios ----
+// Expected values are written out BY HAND here (not read from the ruleset), so
+// an accidental edit to core/data/ruleset.json or geo-bounds.json fails
+// conformance. The ruleset is DRAFT (v0.2.0-DRAFT-UNVERIFIED) legal content —
+// pending counsel review before any real deployment.
+const policyScenarios = {
   meta: {
-    rulesetVersion: 1,
+    rulesetVersion: '0.2.0-DRAFT-UNVERIFIED',
+    defaultProfileId: 'RESTRICTED_DEFAULT',
     description:
-      'Region id -> expected capture profile, plus §7.3 override cases (manual may only make rules stricter).',
+      'GPS coordinates / manual jurisdiction codes -> expected resolution through the PolicyEngine (ruleset + geo bounds injected from core/data/*.json). Multiple geo candidates are expected; the engine takes the strictest.',
   },
-  regions: [
-    { regionId: 'unknown', expect: { rawMode: 'blur-at-capture', audioEnabled: false, retentionSeconds: 1 * DAY } },
-    { regionId: 'us-general', expect: { rawMode: 'raw-sealed', audioEnabled: true, retentionSeconds: 7 * DAY } },
-    { regionId: 'us-il', expect: { rawMode: 'blur-at-capture', audioEnabled: true, retentionSeconds: 1 * DAY } },
-    { regionId: 'eu', expect: { rawMode: 'raw-sealed', audioEnabled: false, retentionSeconds: 3 * DAY } },
-    { regionId: 'demo', expect: { rawMode: 'raw-sealed', audioEnabled: true, retentionSeconds: 7 * DAY } },
-  ],
-  // Ranks strictly descend left-to-right (strictnessRank ordering sanity).
-  strictnessOrder: ['unknown', 'us-il', 'eu', 'us-general'],
-  overrideCases: [
+  // Real coordinates fed through updateLocation (fresh, accurate fix).
+  geoCases: [
+    { name: 'paris', lat: 48.8566, lon: 2.3522, expect: { jurisdictionCode: 'FR', profileId: 'FR_BLOCKED' } },
+    { name: 'barcelona', lat: 41.3874, lon: 2.1686, expect: { jurisdictionCode: 'ES', profileId: 'ES_STRICT' } },
+    { name: 'singapore', lat: 1.3521, lon: 103.8198, expect: { jurisdictionCode: 'SG', profileId: 'SG_PERSONAL' } },
+    { name: 'hong-kong', lat: 22.3193, lon: 114.1694, expect: { jurisdictionCode: 'HK', profileId: 'HK_PERSONAL' } },
+    { name: 'mexico-city', lat: 19.4326, lon: -99.1332, expect: { jurisdictionCode: 'MX', profileId: 'MX_PERSONAL' } },
+    { name: 'brisbane', lat: -27.4698, lon: 153.0251, expect: { jurisdictionCode: 'AU-QLD', profileId: 'AU_ONE_PARTY' } },
     {
-      name: 'manual-looser-raw-stricter-retention',
-      auto: { rawMode: 'blur-at-capture', audioEnabled: true, retentionSeconds: 1 * DAY },
-      manual: { rawMode: 'raw-sealed', audioEnabled: true, retentionSeconds: 3600 },
-      expect: { rawMode: 'blur-at-capture', audioEnabled: true, retentionSeconds: 3600 },
+      name: 'melbourne', lat: -37.8136, lon: 144.9631,
+      expect: { jurisdictionCode: 'AU-VIC', profileId: 'AU_ALL_PARTY', candidatesInclude: ['AU-VIC', 'AU'] },
+    },
+    { name: 'sydney', lat: -33.8688, lon: 151.2093, expect: { jurisdictionCode: 'AU-NSW', profileId: 'AU_ALL_PARTY' } },
+    {
+      name: 'tokyo', lat: 35.6762, lon: 139.6503, // unmatched -> fail-safe default + auditable event
+      expect: { jurisdictionCode: null, profileId: 'RESTRICTED_DEFAULT', noCandidates: true },
     },
     {
-      name: 'manual-turns-audio-on-gets-clamped',
-      auto: { rawMode: 'raw-sealed', audioEnabled: false, retentionSeconds: 3 * DAY },
-      manual: { rawMode: 'raw-sealed', audioEnabled: true, retentionSeconds: 7 * DAY },
-      expect: { rawMode: 'raw-sealed', audioEnabled: false, retentionSeconds: 3 * DAY },
-    },
-    {
-      name: 'manual-strictly-stricter-wins-everywhere',
-      auto: { rawMode: 'raw-sealed', audioEnabled: true, retentionSeconds: 7 * DAY },
-      manual: { rawMode: 'blur-at-capture', audioEnabled: false, retentionSeconds: 1 * DAY },
-      expect: { rawMode: 'blur-at-capture', audioEnabled: false, retentionSeconds: 1 * DAY },
+      name: 'es-fr-border', lat: 42.42, lon: 2.85, // near-border: both sides match, stricter (FR) wins
+      expect: { jurisdictionCode: 'FR', profileId: 'FR_BLOCKED', candidatesInclude: ['FR', 'ES'] },
     },
   ],
+  // setManualJurisdiction(code) -> expected governing profile facts.
+  manualCases: [
+    { code: 'FR', expect: { profileId: 'FR_BLOCKED', recordingAllowed: false, audioCapture: false } },
+    { code: 'ES', expect: { profileId: 'ES_STRICT', rawRetention: 'blurAtCapture', audioCapture: false } },
+    { code: 'SG', expect: { profileId: 'SG_PERSONAL', rawRetention: 'sealed', audioCapture: true } },
+    { code: 'HK', expect: { profileId: 'HK_PERSONAL', rawRetention: 'sealed', audioCapture: true } },
+    { code: 'MX', expect: { profileId: 'MX_PERSONAL', rawRetention: 'sealed', audioCapture: true } },
+    { code: 'AU', expect: { profileId: 'AU_ALL_PARTY', audioCapture: false } }, // bare AU must NOT assume one-party
+    { code: 'AU-QLD', expect: { profileId: 'AU_ONE_PARTY', audioCapture: true } },
+    { code: 'AU-NT', expect: { profileId: 'AU_ONE_PARTY', audioCapture: true } },
+    { code: 'AU-VIC', expect: { profileId: 'AU_ALL_PARTY', audioCapture: false } },
+    { code: 'AU-NSW', expect: { profileId: 'AU_ALL_PARTY', audioCapture: false } },
+    { code: 'AU-SA', expect: { profileId: 'AU_ALL_PARTY', audioCapture: false } },
+    { code: 'AU-WA', expect: { profileId: 'AU_ALL_PARTY', audioCapture: false } },
+    { code: 'AU-TAS', expect: { profileId: 'AU_ALL_PARTY', audioCapture: false } },
+    { code: 'AU-ACT', expect: { profileId: 'AU_ALL_PARTY', audioCapture: false } },
+    { code: 'JP', expect: { profileId: 'RESTRICTED_DEFAULT', unmatchedEvent: true } }, // no rule -> default + event
+  ],
+  // Six researched countries must resolve to six DISTINCT profiles.
+  distinctCountryCodes: ['FR', 'ES', 'SG', 'HK', 'MX', 'AU'],
 };
 
 writeFileSync(path.join(fixturesDir, 'threat-scenarios.json'), JSON.stringify(threatScenarios, null, 2));
 writeFileSync(path.join(fixturesDir, 'motion-scenarios.json'), JSON.stringify(motionScenarios, null, 2));
 writeFileSync(path.join(fixturesDir, 'audit-chain.json'), JSON.stringify(auditChain, null, 2));
 writeFileSync(path.join(fixturesDir, 'evidence-segments.json'), JSON.stringify(evidenceSegments, null, 2));
-writeFileSync(path.join(fixturesDir, 'policy-regions.json'), JSON.stringify(policyRegions, null, 2));
+writeFileSync(path.join(fixturesDir, 'policy-scenarios.json'), JSON.stringify(policyScenarios, null, 2));
 console.log('fixtures written');

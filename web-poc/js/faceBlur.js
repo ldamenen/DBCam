@@ -62,9 +62,12 @@ export class FaceBlur {
    * @param {HTMLVideoElement} video   raw source
    * @param {{boxes:Array,maxScore:number}} faceResult latest face detection
    * @param {number} nowMs
+   * @param {Array<{x:number,y:number,w:number,h:number}>} [extraRegions]
+   *   Additional regions to pixelate exactly like padded face boxes — used when
+   *   the active policy profile's blurMode is 'facesAndBodies' (person boxes).
    * @returns {{overBlurred:boolean, blurredCount:number}}
    */
-  render(video, faceResult, nowMs) {
+  render(video, faceResult, nowMs, extraRegions = []) {
     const { ctx } = this;
     const w = this.canvas.width;
     const h = this.canvas.height;
@@ -106,6 +109,19 @@ export class FaceBlur {
         ? b.mosaicBlocksLowConf
         : b.mosaicBlocksFace;
       this._pixelateRegion(x, y, rw, rh, blocks);
+      count++;
+    }
+
+    // 4) Extra policy-driven regions (person boxes when blurMode is
+    //    'facesAndBodies') — pixelated exactly like padded face boxes.
+    for (const box of extraRegions) {
+      const padX = box.w * b.facePaddingPct;
+      const padY = box.h * b.facePaddingPct;
+      const x = Math.max(0, Math.floor(box.x - padX));
+      const y = Math.max(0, Math.floor(box.y - padY));
+      const rw = Math.min(w - x, Math.ceil(box.w + padX * 2));
+      const rh = Math.min(h - y, Math.ceil(box.h + padY * 2));
+      this._pixelateRegion(x, y, rw, rh, b.mosaicBlocksFace);
       count++;
     }
     return { overBlurred: false, blurredCount: count };

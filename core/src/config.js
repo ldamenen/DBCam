@@ -5,7 +5,7 @@
 
 export const CONFIG = {
   // Bump on every deploy so the header shows which build is loaded (cache check).
-  version: 'v0.13.0',
+  version: 'v0.14.0',
 
   capture: {
     // Target capture constraints. Native target is 1080p30 (§4 real-time budget);

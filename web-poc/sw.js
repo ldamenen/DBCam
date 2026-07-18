@@ -11,7 +11,7 @@
 // Only GET requests on http(s) are handled; media blobs and everything else pass
 // straight through.
 
-const CACHE = 'dbcam-v0.13.0';
+const CACHE = 'dbcam-v0.14.0';
 
 self.addEventListener('install', () => {
   self.skipWaiting();
