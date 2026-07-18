@@ -26,6 +26,7 @@ import { Recorder } from './recorder.js';
 import { EvidenceStore } from './evidenceStore.js';
 import { SessionController } from './sessionController.js';
 import { AuditLog } from './auditLog.js';
+import { saveSession, listSessions, getSession, deleteSession, purgeOlderThan } from './storageStore.js';
 import { UI } from './ui.js';
 import { buildManifest, summarize } from '../../core/src/capabilities.js';
 
@@ -86,6 +87,13 @@ ui.onSensitivity((v) => animalDeterrent.setSensitivity(v));
 ui.setVersion(CONFIG.version);
 ui.setStatus('Ready. Tap the red button to start.');
 ui.showProfile(policy.getProfile());
+
+// Saved recordings: enforce the ACTIVE profile's retention rule (the number
+// lives in the Core policy profile, not here), then show what's kept.
+(async () => {
+  try { await purgeOlderThan(policy.getProfile().retentionSeconds * 1000); } catch (_e) {}
+  await refreshRecordings();
+})();
 
 // Restore voice-trigger settings and reflect availability.
 try { ui.setVoiceConfig(JSON.parse(localStorage.getItem(VOICE_LS) || '{}')); } catch (_e) {}
@@ -338,30 +346,10 @@ async function stop() {
   ui.renderEvidence(segments, {
     hasRaw: evidence.hasRaw(),
     prerollSeconds: CONFIG.incident.prerollSeconds,
-    onUnseal: async (seg, rowEl) => {
-      const ok = window.confirm(
-        `Unlock Alert ${seg.index} (${ui.formatReasons(seg.reasons)})?\n\n` +
-        'The original video with faces visible will play. This is noted in the activity log.',
-      );
-      if (!ok) return;
-      const win = await evidence.unseal(seg, performance.now());
-      if (!win) return;
-      ui.markSegmentUnsealed(rowEl);
-      // Export is only offered once unsealed; every export is audit-logged (§6).
-      ui.addExportButton(rowEl, async () => {
-        const exp = await evidence.exportRaw(seg, performance.now());
-        if (!exp) return;
-        const a = document.createElement('a');
-        a.href = exp.url;
-        a.download = exp.filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        ui.renderAuditLog(auditLog.toJSON());
-      });
-      ui.playRawWindow(win.url, win.startSec, win.endSec, `Alert ${seg.index} — ${ui.formatReasons(seg.reasons)}`);
-      ui.renderAuditLog(auditLog.toJSON());
-    },
+    onUnseal: makeUnsealHandler({
+      store: evidence,
+      renderAudit: () => ui.renderAuditLog(auditLog.toJSON()),
+    }),
   });
   ui.renderAuditLog(auditLog.toJSON());
 
@@ -377,4 +365,146 @@ async function stop() {
       `${evidence.hasRaw() ? 'kept safely (unlock below to view)' : 'noted'}.`,
     );
   }
+
+  // Persist the finished session on this device so it survives a reload
+  // (auto-deleted later by the profile's retention rule). Segments are stored
+  // locked — unlock state never persists.
+  if (blurredResult) {
+    try {
+      await saveSession({
+        createdAt: Date.now(),
+        durationMs: Math.max(0, Math.round(stopMs - sessionStartMs)),
+        alertsCount: n,
+        version: CONFIG.version,
+        profile: { jurisdiction: activeProfile.jurisdiction, rawMode: activeProfile.rawMode },
+        blurred: { blob: blurredResult.blob, mimeType: blurredResult.mimeType },
+        raw: rawResult ? { blob: rawResult.blob, mimeType: rawResult.mimeType } : null,
+        segments,
+        auditEntries: auditLog.toJSON().map((e) => ({ ...e })),
+      });
+      await refreshRecordings();
+    } catch (err) {
+      console.error(err);
+      ui.setStatus("Could not save to this device's storage.");
+    }
+  }
+}
+
+/**
+ * Shared unlock-to-view handler for the evidence list (§6 rules live in the
+ * Core ledger; this wires confirm dialog -> unseal -> clamped playback -> export).
+ * Used by both the live session review and the saved-recording review.
+ * @param {{store: EvidenceStore, renderAudit: ()=>void, afterChange?: ()=>Promise<void>}} deps
+ */
+function makeUnsealHandler({ store, renderAudit, afterChange }) {
+  return async (seg, rowEl) => {
+    const ok = window.confirm(
+      `Unlock Alert ${seg.index} (${ui.formatReasons(seg.reasons)})?\n\n` +
+      'The original video with faces visible will play. This is noted in the activity log.',
+    );
+    if (!ok) return;
+    const win = await store.unseal(seg, performance.now());
+    if (!win) return;
+    ui.markSegmentUnsealed(rowEl);
+    // Export is only offered once unsealed; every export is audit-logged (§6).
+    ui.addExportButton(rowEl, async () => {
+      const exp = await store.exportRaw(seg, performance.now());
+      if (!exp) return;
+      const a = document.createElement('a');
+      a.href = exp.url;
+      a.download = exp.filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      renderAudit();
+      if (afterChange) await afterChange();
+    });
+    ui.playRawWindow(win.url, win.startSec, win.endSec, `Alert ${seg.index} — ${ui.formatReasons(seg.reasons)}`);
+    renderAudit();
+    if (afterChange) await afterChange();
+  };
+}
+
+// ===== Saved recordings ("My recordings") =====
+
+let watchUrls = []; // object URLs created for the recording being watched
+
+/** Re-read the saved-sessions list and (re)render the "My recordings" section. */
+async function refreshRecordings() {
+  try {
+    const items = await listSessions();
+    ui.renderRecordings(items, {
+      onWatch: (item) => { watchRecording(item.id).catch((e) => console.error(e)); },
+      onDelete: async (item) => {
+        const ok = window.confirm(
+          'Delete this recording?\n\nIt will be removed from this device and cannot be brought back.',
+        );
+        if (!ok) return;
+        try {
+          await deleteSession(item.id);
+          await refreshRecordings();
+        } catch (e) { console.error(e); }
+      },
+    });
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+/**
+ * Load a saved session into the existing review UI. Every watch starts with all
+ * alerts LOCKED again (unlock state is never persisted — by design); unlocking
+ * or exporting during this review is appended to the recording's activity log
+ * and saved back to the device.
+ */
+async function watchRecording(id) {
+  if (running) return; // never disturb a live session
+  const rec = await getSession(id);
+  if (!rec) { await refreshRecordings(); return; }
+
+  ui.closeRawPlayer();
+  for (const u of watchUrls) URL.revokeObjectURL(u);
+  watchUrls = [];
+
+  // Recreate playable URLs from the stored blobs.
+  const blurred = rec.blurred ? { blob: rec.blurred.blob, mimeType: rec.blurred.mimeType, url: URL.createObjectURL(rec.blurred.blob) } : null;
+  const raw = rec.raw ? { blob: rec.raw.blob, mimeType: rec.raw.mimeType, url: URL.createObjectURL(rec.raw.blob) } : null;
+  if (blurred) watchUrls.push(blurred.url);
+  if (raw) watchUrls.push(raw.url);
+
+  // Review audit copy: a fresh adapter whose chain CONTINUES from the stored
+  // entries (same seq/prevHash lineage), so review-time unlocks/exports append
+  // to this recording's log without touching the live session's log.
+  const baseEntries = (rec.auditEntries || []).map((e) => ({ ...e }));
+  const reviewAudit = new AuditLog();
+  const lastEntry = baseEntries[baseEntries.length - 1];
+  if (lastEntry) { reviewAudit._seq = lastEntry.seq; reviewAudit._lastHash = lastEntry.hash; }
+
+  const store = new EvidenceStore({ auditLog: reviewAudit });
+  store.setRawMode(rec.profile.rawMode);
+  store.setBlurred(blurred);
+  store.setRaw(raw);
+  // Segments start locked again every time — by design.
+  const segments = (rec.segments || []).map((s) => ({ ...s, unsealed: false }));
+  store.ledger.segments = segments;
+
+  const renderAudit = () => ui.renderAuditLog(baseEntries.concat(reviewAudit.toJSON()));
+  const persist = async () => {
+    try {
+      rec.auditEntries = baseEntries.concat(reviewAudit.toJSON()).map((e) => ({ ...e }));
+      rec.segments = segments; // stored locked again by saveSession
+      await saveSession(rec);
+    } catch (e) { console.error(e); }
+  };
+
+  if (blurred) ui.showPlayback(blurred.url, blurred.mimeType);
+  ui.renderEvidence(segments, {
+    hasRaw: store.hasRaw(),
+    prerollSeconds: CONFIG.incident.prerollSeconds,
+    onUnseal: makeUnsealHandler({ store, renderAudit, afterChange: persist }),
+  });
+  renderAudit();
+  ui.setSessionState('review');
+  ui.setStatus('Showing a saved recording — it is below.');
+  ui.el.reviewHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }

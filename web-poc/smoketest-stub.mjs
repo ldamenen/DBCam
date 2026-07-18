@@ -109,10 +109,26 @@ const afterUnseal = await page.evaluate(() => ({
   auditHasExport: [...document.querySelectorAll('#auditList .a-type')].some(e => e.textContent === 'raw-export'),
 }));
 
+// Persistence: reload the page — the finished session must have been saved to
+// IndexedDB, appear under "My recordings", and Watch must reopen the review UI.
+await page.goto(`http://localhost:${PORT}/web-poc/`, { waitUntil: 'load' });
+await page.waitForTimeout(1500); // async IndexedDB list render
+const afterReload = await page.evaluate(() => ({
+  recordingsHidden: document.getElementById('recordings').hidden,
+  recordingRows: document.querySelectorAll('#recordingsList .segment').length,
+}));
+await page.click('#recordingsList .segment .btn.watch');
+await page.waitForTimeout(1200);
+const afterWatch = await page.evaluate(() => ({
+  playbackHidden: document.getElementById('playback').hidden,
+}));
+
 console.log('VERSION', versionText);
 console.log('DET_STATUS', detStatus);
 console.log('AFTER_STOP', JSON.stringify(afterStop, null, 2));
 console.log('AFTER_UNSEAL', JSON.stringify(afterUnseal, null, 2));
+console.log('AFTER_RELOAD', JSON.stringify(afterReload, null, 2));
+console.log('AFTER_WATCH', JSON.stringify(afterWatch, null, 2));
 console.log('ERRORS', JSON.stringify(errors, null, 2));
 
 await browser.close();
@@ -131,6 +147,9 @@ const ok =
   afterUnseal.segUnsealedClass === true &&
   afterUnseal.auditHasUnseal === true &&
   afterUnseal.auditHasExport === true &&
+  afterReload.recordingsHidden === false &&
+  afterReload.recordingRows >= 1 &&
+  afterWatch.playbackHidden === false &&
   errors.length === 0;
 console.log(ok ? 'PASS' : 'FAIL');
 process.exit(ok ? 0 : 1);

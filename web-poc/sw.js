@@ -6,10 +6,12 @@
 //     but the app still opens with no connectivity.
 //   - vendor/ assets (MediaPipe wasm + models, ~26MB total): CACHE-FIRST — big,
 //     versioned-with-the-repo, no reason to refetch on every load.
+//   - The PWA manifest + icons are same-origin (relative to /web-poc/), so the
+//     network-first branch below caches them too — installable offline.
 // Only GET requests on http(s) are handled; media blobs and everything else pass
 // straight through.
 
-const CACHE = 'dbcam-v0.10.0';
+const CACHE = 'dbcam-v0.11.0';
 
 self.addEventListener('install', () => {
   self.skipWaiting();

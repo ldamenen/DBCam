@@ -55,6 +55,8 @@ export class UI {
       rawVideo: document.getElementById('rawVideo'),
       auditSection: document.getElementById('auditSection'),
       auditList: document.getElementById('auditList'),
+      recordings: document.getElementById('recordings'),
+      recordingsList: document.getElementById('recordingsList'),
     };
     this.overlayCtx = this.el.overlay.getContext('2d');
     this._fpsSamples = [];
@@ -331,6 +333,50 @@ export class UI {
     v.pause();
     if (this._rawClampHandler) { v.removeEventListener('timeupdate', this._rawClampHandler); this._rawClampHandler = null; }
     this.el.rawPlayerWrap.hidden = true;
+  }
+
+  /**
+   * Render the "My recordings" list of sessions saved on this device.
+   * Hidden entirely when there is nothing saved.
+   * @param {Array} items summaries from storageStore.listSessions
+   * @param {{onWatch:(item:Object)=>void, onDelete:(item:Object)=>void}} handlers
+   */
+  renderRecordings(items, { onWatch, onDelete }) {
+    const section = this.el.recordings;
+    const list = this.el.recordingsList;
+    list.innerHTML = '';
+    if (!items || !items.length) { section.hidden = true; return; }
+    section.hidden = false;
+
+    for (const item of items) {
+      const li = document.createElement('li');
+      li.className = 'segment recording';
+
+      const info = document.createElement('div');
+      info.className = 'segment-info';
+      const when = new Date(item.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+      const n = item.alertsCount || 0;
+      info.innerHTML =
+        `<span class="seg-idx">${escapeHtml(when)}</span>` +
+        `<span class="seg-window">${fmt(item.durationMs / 1000)}</span>` +
+        `<span class="seg-reason">${n} alert${n === 1 ? '' : 's'}</span>`;
+      li.appendChild(info);
+
+      const actions = document.createElement('div');
+      actions.className = 'rec-actions';
+      const watchBtn = document.createElement('button');
+      watchBtn.className = 'btn small watch';
+      watchBtn.textContent = 'Watch';
+      watchBtn.addEventListener('click', () => onWatch(item));
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn small ghost delete';
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.addEventListener('click', () => onDelete(item));
+      actions.appendChild(watchBtn);
+      actions.appendChild(deleteBtn);
+      li.appendChild(actions);
+      list.appendChild(li);
+    }
   }
 
   renderAuditLog(entries) {

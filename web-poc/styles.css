@@ -266,6 +266,11 @@ body.running .record.stop { display: grid; }
 .segment.unsealed .btn { border-color: var(--ok); color: #bff3d3; background: rgba(34,197,94,0.1); }
 .segment .btn.export { border-color: var(--accent); color: #bfe7fb; background: rgba(56,189,248,0.08); }
 
+/* "My recordings" rows reuse the .segment look; only the buttons differ. */
+.rec-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.segment.recording .btn.watch { border-color: var(--accent); color: #bfe7fb; background: rgba(56,189,248,0.08); }
+.segment.recording .btn.delete { border-color: var(--border-2); color: var(--muted); background: transparent; }
+
 .raw-player {
   margin-top: 12px; padding: 12px; border: 1px solid rgba(239,68,68,0.5);
   border-radius: 12px; background: rgba(239, 68, 68, 0.06);
