@@ -86,11 +86,15 @@ const afterStop = await page.evaluate(() => ({
 // Unseal the first segment.
 await page.click('#segmentList .segment button');
 await page.waitForTimeout(1500);
+// Export the unsealed raw (should download + write a raw-export audit entry).
+await page.click('#segmentList .segment .btn.export');
+await page.waitForTimeout(800);
 const afterUnseal = await page.evaluate(() => ({
   rawPlayerHidden: document.getElementById('rawPlayerWrap').hidden,
   rawHasSrc: !!document.getElementById('rawVideo').src,
   segUnsealedClass: !!document.querySelector('#segmentList .segment.unsealed'),
   auditHasUnseal: [...document.querySelectorAll('#auditList .a-type')].some(e => e.textContent === 'raw-unseal'),
+  auditHasExport: [...document.querySelectorAll('#auditList .a-type')].some(e => e.textContent === 'raw-export'),
 }));
 
 console.log('VERSION', versionText);
@@ -114,6 +118,7 @@ const ok =
   afterUnseal.rawHasSrc === true &&
   afterUnseal.segUnsealedClass === true &&
   afterUnseal.auditHasUnseal === true &&
+  afterUnseal.auditHasExport === true &&
   errors.length === 0;
 console.log(ok ? 'PASS' : 'FAIL');
 process.exit(ok ? 0 : 1);

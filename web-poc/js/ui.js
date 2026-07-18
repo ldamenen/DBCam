@@ -261,6 +261,17 @@ export class UI {
     if (btn) { btn.textContent = '🔓 Unsealed'; btn.disabled = true; }
   }
 
+  /** Add an "Export raw" button to an unsealed segment row (logged download, §6). */
+  addExportButton(rowEl, onClick) {
+    if (rowEl.querySelector('.btn.export')) return;
+    const btn = document.createElement('button');
+    btn.className = 'btn small export';
+    btn.textContent = '⬇ Export raw';
+    btn.title = 'Downloads the full raw session file (the browser cannot trim to the incident window). The export is written to the audit log.';
+    btn.addEventListener('click', onClick);
+    rowEl.appendChild(btn);
+  }
+
   /** Play the raw recording clamped to [startSec, endSec]. */
   playRawWindow(url, startSec, endSec, label) {
     this.el.rawPlayerWrap.hidden = false;

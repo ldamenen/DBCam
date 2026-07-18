@@ -77,6 +77,25 @@ export class EvidenceStore {
     }
     return { startSec: segment.startSec, endSec: segment.endSec, url: this.raw.url };
   }
+
+  /**
+   * Export the raw for an UNSEALED segment (§6: export under authorization, logged).
+   * Browser caveat: we cannot trim to the incident window without a re-encode, so
+   * this hands back the full raw session file; the in-app player stays clamped.
+   * @returns {Promise<{url:string, filename:string}|null>}
+   */
+  async exportRaw(segment, nowMs) {
+    if (!this.hasRaw() || !segment.unsealed) return null;
+    if (this.auditLog) {
+      await this.auditLog.append(
+        'raw-export',
+        { segment: segment.index, reason: segment.reason, note: 'full raw file (browser cannot trim)' },
+        nowMs,
+      );
+    }
+    const ext = this.raw.mimeType.includes('mp4') ? 'mp4' : 'webm';
+    return { url: this.raw.url, filename: `dbcam-raw-incident-${segment.index}.${ext}` };
+  }
 }
 
 function round1(n) { return Math.round(n * 10) / 10; }

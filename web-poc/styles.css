@@ -264,6 +264,7 @@ body.running .record.stop { display: grid; }
   background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px; }
 .segment .btn { border-color: var(--warn); color: #ffd9a1; background: rgba(245,158,11,0.08); }
 .segment.unsealed .btn { border-color: var(--ok); color: #bff3d3; background: rgba(34,197,94,0.1); }
+.segment .btn.export { border-color: var(--accent); color: #bfe7fb; background: rgba(56,189,248,0.08); }
 
 .raw-player {
   margin-top: 12px; padding: 12px; border: 1px solid rgba(239,68,68,0.5);

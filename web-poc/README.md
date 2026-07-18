@@ -68,7 +68,10 @@ Press **Stop** to get the review:
 - **Sealed raw evidence** — each incident is a segment of the *unblurred* recording,
   reaching back `prerollSeconds` before the trigger (the buildup). It stays sealed
   until you click **Authorize & unseal**, which writes to the audit log and then
-  plays *only* that incident's window. The live preview is never unblurred — raw is
+  plays *only* that incident's window. Once unsealed, **⬇ Export raw** downloads the
+  raw file — every export is also audit-logged. (Browser caveat: the export is the
+  full raw session file, since trimming to the window would need a re-encode; the
+  in-app player stays clamped.) The live preview is never unblurred — raw is
   release-time only (§1).
 - **Audit log** — append-only, hash-chained; every incident open/close and every
   raw unseal is recorded.

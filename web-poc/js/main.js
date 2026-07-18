@@ -320,6 +320,18 @@ async function stop() {
       const win = await evidence.unseal(seg, performance.now());
       if (!win) return;
       ui.markSegmentUnsealed(rowEl);
+      // Export is only offered once unsealed; every export is audit-logged (§6).
+      ui.addExportButton(rowEl, async () => {
+        const exp = await evidence.exportRaw(seg, performance.now());
+        if (!exp) return;
+        const a = document.createElement('a');
+        a.href = exp.url;
+        a.download = exp.filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        ui.renderAuditLog(auditLog.toJSON());
+      });
       ui.playRawWindow(win.url, win.startSec, win.endSec, `Incident ${seg.index} — ${seg.reasons.join(', ')}`);
       ui.renderAuditLog(auditLog.toJSON());
     },
