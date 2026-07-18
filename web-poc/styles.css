@@ -149,6 +149,7 @@ body.started .idle-overlay, body.running .idle-overlay { display: none; }
   padding: 9px 12px; background: rgba(56,189,248,0.08);
   border: 1px solid rgba(56,189,248,0.3); border-radius: var(--radius-sm);
 }
+.region-hint[hidden] { display: none; }
 .region-hint span { flex: 1; }
 .region-hint-close {
   flex: none; border: none; background: transparent; color: var(--muted);

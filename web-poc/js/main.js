@@ -20,6 +20,8 @@ import { FaceBlur } from './faceBlur.js';
 import { AnimalDeterrent } from './animalDeterrent.js';
 import { DeterrentSound } from './deterrentSound.js';
 import { VoiceTrigger } from './voiceTrigger.js';
+import { MotionSensor } from './motionSensor.js';
+import { MotionDetector } from '../../core/src/motion.js';
 import { AudioMonitor } from './audioMonitor.js';
 import { IncidentDetector } from './incidentDetector.js';
 import { Recorder } from './recorder.js';
@@ -47,6 +49,7 @@ const CAPABILITIES = buildManifest({
     reason: VoiceTrigger.isSupported() ? 'Web Speech API uses vendor servers' : 'API unavailable',
   },
   deterrent: { supported: !!(window.AudioContext || window.webkitAudioContext) },
+  motionSensor: { supported: MotionSensor.isSupported() },
   rawRecording: { supported: !!window.MediaRecorder },
   secureSealing: { supported: false, reason: 'no hardware keystore in the browser' },
   backgroundSafe: { supported: false, reason: 'browser suspends hidden tabs' },
@@ -62,6 +65,9 @@ const animalDeterrent = new AnimalDeterrent();
 const audioMonitor = new AudioMonitor();
 const voice = new VoiceTrigger();
 const VOICE_LS = 'dbcam.voice';
+const motionSensor = new MotionSensor();
+const MOTION_LS = 'dbcam.motion';
+let motionDetector = null; // session-scoped Core detector (recreated on Start)
 
 // Per-session objects (recreated on Start).
 let capture = null;
@@ -150,6 +156,44 @@ function applyVoice() {
   }
 }
 
+// Restore movement-alert setting (default ON when the device has a motion
+// sensor — falls are exactly the moment the wearer can't press a button).
+let storedMotion = null;
+try { storedMotion = JSON.parse(localStorage.getItem(MOTION_LS) || 'null'); } catch (_e) {}
+ui.setMotionConfig(storedMotion && typeof storedMotion.enabled === 'boolean' ? storedMotion : { enabled: true });
+ui.onMotionChange(() => applyMotion());
+applyMotion(); // sets initial status (off / ready / not available)
+
+/**
+ * Start/stop the motion sensor based on settings + session state. All decisions
+ * (what counts as a shake or fall) live in the Core MotionDetector; this only
+ * moves samples. `sessionActive` is passed explicitly from start() because the
+ * iOS permission prompt must run inside the Start tap, before `running` is set.
+ */
+async function applyMotion(sessionActive = running) {
+  const cfg = ui.getMotionConfig();
+  try { localStorage.setItem(MOTION_LS, JSON.stringify(cfg)); } catch (_e) {}
+
+  if (!MotionSensor.isSupported()) { ui.setMotionStatus('unsupported'); return; }
+  motionSensor.stop();
+  motionDetector = null;
+  if (sessionActive && cfg.enabled) {
+    motionDetector = new MotionDetector();
+    ui.setMotionStatus('starting…');
+    const ok = await motionSensor.start((ax, ay, az, tMs) => {
+      if (!running || !incident || !motionDetector) return;
+      const r = motionDetector.update(ax, ay, az, tMs);
+      if (r.triggered) {
+        // Same effect as the Alert button: seal + sound the deterrent.
+        fireEvent('imu', tMs, { kind: r.kind, magnitude: Math.round(r.magnitude * 10) / 10 });
+      }
+    });
+    ui.setMotionStatus(ok ? 'on' : 'denied');
+  } else {
+    ui.setMotionStatus(cfg.enabled ? 'ready' : 'off');
+  }
+}
+
 ui.onStart(async () => {
   try {
     await start();
@@ -157,6 +201,7 @@ ui.onStart(async () => {
     console.error(err);
     ui.setStatus(`Error: ${err.message}`);
     ui.setRunning(false);
+    applyMotion(); // running never became true — release the sensor if it started
   }
 });
 
@@ -196,6 +241,11 @@ async function start() {
 
   // Prime the audio context from this user gesture (autoplay policy).
   deterrentSound.ensureContext();
+
+  // Movement alert: subscribe NOW, still inside the Start tap — iOS 13+ only
+  // grants motion permission during a user gesture, and the camera/model
+  // loading below can outlive it. Samples are ignored until running is set.
+  applyMotion(true);
 
   ui.setStatus('Turning on the camera…');
   capture = new CaptureLayer();
@@ -356,6 +406,7 @@ async function stop() {
   const stopMs = performance.now();
   voice.stop();
   applyVoice(); // reset voice status to ready/off now that we're idle
+  applyMotion(); // unsubscribe the motion sensor; status back to ready/off
   audioMonitor.stop();
   if (incident) incident.finalize(stopMs);
 

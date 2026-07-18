@@ -14,6 +14,7 @@ export {
 } from './policy.js';
 export { AnimalDeterrent } from './threat.js';
 export { IncidentDetector } from './incident.js';
+export { MotionDetector } from './motion.js';
 export { AuditLog } from './audit.js';
 export { buildSegments, EvidenceLedger } from './evidence.js';
 export { DeterrentPolicy } from './deterrent.js';

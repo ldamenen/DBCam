@@ -92,6 +92,27 @@ await page.waitForTimeout(3000);
 // With a face detected and the detector healthy, we must be in FACES-ONLY mode,
 // i.e. NOT whole-frame over-blur.
 const detStatus = await page.evaluate(() => document.getElementById('detPill').textContent);
+// Movement alert: a synthetic devicemotion burst (the violent-shake pattern from
+// the golden fixtures) must travel the FULL path: adapter -> Core MotionDetector
+// -> fireEvent('imu') -> incident + deterrent. accelerationIncludingGravity is a
+// readonly getter on real events, so it is defined onto a plain Event instance.
+const motionState = await page.evaluate(async () => {
+  const dispatch = (x, y, z) => {
+    const e = new Event('devicemotion');
+    Object.defineProperty(e, 'accelerationIncludingGravity', { value: { x, y, z } });
+    window.dispatchEvent(e);
+  };
+  for (let i = 0; i < 30; i++) {           // ~600ms of ±25 m/s^2 jolts at ~50Hz
+    dispatch(i % 2 ? 25 : -25, 0, 9.81);
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  await new Promise((r) => setTimeout(r, 400)); // let the incident banner/count render
+  return {
+    alerts: document.getElementById('incidentCount').textContent,
+    motionStatus: document.getElementById('motionStatus').textContent,
+    motionChecked: document.getElementById('motionEnable').checked,
+  };
+});
 await page.click('#eventBtn');          // flag a manual incident
 await page.waitForTimeout(2500);
 await page.click('#stopBtn');
@@ -184,6 +205,7 @@ await ctx2.close();
 console.log('VERSION', versionText);
 console.log('REGION_STATE', JSON.stringify(regionState, null, 2));
 console.log('DET_STATUS', detStatus);
+console.log('MOTION_STATE', JSON.stringify(motionState, null, 2));
 console.log('AFTER_STOP', JSON.stringify(afterStop, null, 2));
 console.log('AFTER_UNSEAL', JSON.stringify(afterUnseal, null, 2));
 console.log('AFTER_RELOAD', JSON.stringify(afterReload, null, 2));
@@ -204,6 +226,10 @@ const ok =
   regionState.hintHidden === true &&      // a region is chosen -> no first-run tip
   /kept locked/.test(regionState.rawPill) &&
   facesOnly &&
+  // Movement alert: default ON, sensor live, and the synthetic shake raised an alert.
+  motionState.motionChecked === true &&
+  motionState.motionStatus === 'on' &&
+  motionState.alerts === 'Alerts: 1' &&
   afterStop.blurredHidden === false &&
   afterStop.evidenceHidden === false &&
   afterStop.segmentCount >= 1 &&

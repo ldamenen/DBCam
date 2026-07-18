@@ -46,6 +46,8 @@ export class UI {
       voiceEnable: document.getElementById('voiceEnable'),
       voiceWord: document.getElementById('voiceWord'),
       voiceStatus: document.getElementById('voiceStatus'),
+      motionEnable: document.getElementById('motionEnable'),
+      motionStatus: document.getElementById('motionStatus'),
       playback: document.getElementById('playback'),
       playbackVideo: document.getElementById('playbackVideo'),
       downloadLink: document.getElementById('downloadLink'),
@@ -151,6 +153,29 @@ export class UI {
   flashVoiceHeard() {
     this.el.voiceStatus.classList.add('hit');
     setTimeout(() => this.el.voiceStatus.classList.remove('hit'), 1200);
+  }
+
+  // --- Movement (shake/fall) trigger controls ---
+  onMotionChange(fn) {
+    this.el.motionEnable.addEventListener('change', () => fn(this.getMotionConfig()));
+  }
+  getMotionConfig() {
+    return { enabled: this.el.motionEnable.checked };
+  }
+  setMotionConfig({ enabled }) {
+    if (typeof enabled === 'boolean') this.el.motionEnable.checked = enabled;
+  }
+  setMotionStatus(text) {
+    // Map technical states to friendly words (plain language for the chip).
+    const friendly = {
+      unsupported: 'not available on this device',
+      denied: 'no permission',
+      'starting…': 'starting…',
+      on: 'on',
+      ready: 'ready',
+      off: 'off',
+    };
+    this.el.motionStatus.textContent = friendly[text] || text;
   }
 
   /** Live detector readout: face count + whether the fail-safe over-blur is active. */

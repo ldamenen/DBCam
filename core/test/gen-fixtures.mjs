@@ -52,6 +52,47 @@ const threatScenarios = {
   ],
 };
 
+// ---- Motion scenarios (IMU shake/fall trigger, §2.2) ----
+// Synthetic accelerometer streams at ~50Hz (20ms steps), m/s^2 INCLUDING
+// gravity. `expect.kind` is the kind of the FIRST trigger during the replay.
+const G = 9.81;
+const r3 = (v) => Math.round(v * 1000) / 1000;
+const motionSamples = (n, startMs, fn) => Array.from({ length: n }, (_, i) => {
+  const tMs = startMs + i * 20;
+  const [ax, ay, az] = fn(tMs, i);
+  return { tMs, ax: r3(ax), ay: r3(ay), az: r3(az) };
+});
+const motionScenarios = {
+  meta: { rateHz: 50, description: 'Golden IMU scenarios: accelerometer samples (incl. gravity, m/s^2) -> expected shake/fall trigger.' },
+  scenarios: [
+    {
+      name: 'calm-walking',            // normal gait: ~±3 m/s^2 around 1g -> silent
+      expect: { triggered: false },
+      samples: motionSamples(150, 0, (t) => [1.2 * Math.sin(t / 90), 0, G + 3 * Math.sin((2 * Math.PI * t) / 500)]),
+    },
+    {
+      name: 'violent-shake',           // ±25 m/s^2 jolts sustained -> 'shake'
+      expect: { triggered: true, kind: 'shake' },
+      samples: motionSamples(30, 0, (_t, i) => [(i % 2 ? 25 : -25), 0, G]),
+    },
+    {
+      name: 'drop-with-impact',        // 300ms weightless then a 30 m/s^2 landing -> 'fall'
+      expect: { triggered: true, kind: 'fall' },
+      samples: [
+        ...motionSamples(25, 0, () => [0, 0, G]),        // carried normally
+        ...motionSamples(16, 500, () => [0.2, 0.1, 0.3]),// free-fall: near-zero magnitude
+        ...motionSamples(1, 820, () => [0, 0, 30]),      // impact spike (fall completes HERE)
+        ...motionSamples(10, 840, () => [0, 0, G]),      // at rest after landing
+      ],
+    },
+    {
+      name: 'brief-jostle',            // one 20ms spike (pothole/bump) -> silent
+      expect: { triggered: false },
+      samples: motionSamples(50, 0, (t) => [0, 0, t === 500 ? 35 : G]),
+    },
+  ],
+};
+
 // ---- Audit chain determinism (SHA-256, canonical serialization) ----
 const auditEvents = [
   { type: 'session-start', detail: {}, tMs: 1000 },
@@ -143,6 +184,7 @@ const policyRegions = {
 };
 
 writeFileSync(path.join(fixturesDir, 'threat-scenarios.json'), JSON.stringify(threatScenarios, null, 2));
+writeFileSync(path.join(fixturesDir, 'motion-scenarios.json'), JSON.stringify(motionScenarios, null, 2));
 writeFileSync(path.join(fixturesDir, 'audit-chain.json'), JSON.stringify(auditChain, null, 2));
 writeFileSync(path.join(fixturesDir, 'evidence-segments.json'), JSON.stringify(evidenceSegments, null, 2));
 writeFileSync(path.join(fixturesDir, 'policy-regions.json'), JSON.stringify(policyRegions, null, 2));

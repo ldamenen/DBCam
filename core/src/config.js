@@ -5,7 +5,7 @@
 
 export const CONFIG = {
   // Bump on every deploy so the header shows which build is loaded (cache check).
-  version: 'v0.12.0',
+  version: 'v0.13.0',
 
   capture: {
     // Target capture constraints. Native target is 1080p30 (§4 real-time budget);
@@ -99,6 +99,30 @@ export const CONFIG = {
     defaultWord: 'help',
     lang: 'en-US',
     retriggerMs: 4000,         // ignore repeat hits within this window
+  },
+
+  motion: {
+    // IMU shake/fall trigger (§2.2 "wearer knocked down"). Samples are raw
+    // accelerometer readings INCLUDING gravity in m/s^2 (~50Hz typical), fed
+    // by each platform's MotionSensor adapter into core/motion.js.
+    gravity: 9.81,             // 1g — magnitude of a phone at rest
+    historyMs: 1000,           // sample history kept (covers the shake window)
+    shake: {
+      // Violent jolt/impact: |magnitude - 1g| beyond this reads as violence.
+      // Normal walking only swings the magnitude by ~±3 m/s^2, so 15 leaves a
+      // wide margin while a real struggle/blow easily exceeds it.
+      deviationThreshold: 15,  // m/s^2 deviation from 1g
+      minCount: 4,             // need this many deviating samples (~80ms at 50Hz)…
+      windowMs: 400,           // …inside this window — a single pothole spike is ignored
+    },
+    fall: {
+      // Free-fall signature: near-weightless stretch then a hard impact.
+      freefallBelow: 3,        // m/s^2 — magnitude under this ≈ falling freely
+      freefallMinMs: 200,      // weightlessness must last this long (~20cm+ of drop)
+      impactAbove: 20,         // m/s^2 — the landing spike that completes the fall
+      impactWithinMs: 1500,    // impact must arrive this soon after the free-fall
+    },
+    retriggerMs: 5000,         // one alert per violent episode, not one per sample
   },
 
   deterrent: {

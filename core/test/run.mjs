@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 
 import { AnimalDeterrent } from '../src/threat.js';
+import { MotionDetector } from '../src/motion.js';
 import { AuditLog } from '../src/audit.js';
 import { buildSegments, EvidenceLedger } from '../src/evidence.js';
 import {
@@ -51,6 +52,43 @@ const check = (name, cond, info = '') => {
       }
     }
   }
+}
+
+// ---- Motion scenarios (IMU shake/fall trigger) ----
+{
+  const { scenarios } = fixture('motion-scenarios.json');
+  console.log('motion-scenarios:');
+  for (const sc of scenarios) {
+    const d = new MotionDetector();
+    let first = null;
+    let triggers = 0;
+    for (const s of sc.samples) {
+      const r = d.update(s.ax, s.ay, s.az, s.tMs);
+      if (r.triggered) { triggers++; if (!first) first = r; }
+    }
+    const ok = !!first === sc.expect.triggered &&
+      (!sc.expect.kind || (first && first.kind === sc.expect.kind));
+    check(sc.name, ok, `(kind=${first ? first.kind : 'none'} triggers=${triggers})`);
+    if (sc.expect.triggered) {
+      check(`${sc.name} debounced to one trigger`, triggers === 1, `(triggers=${triggers})`);
+    }
+  }
+  // Continuous violence inside retriggerMs stays ONE alert; reset() re-arms.
+  const shake = scenarios.find((s) => s.name === 'violent-shake');
+  const d = new MotionDetector();
+  let triggers = 0;
+  for (let rep = 0; rep < 3; rep++) {
+    for (const s of shake.samples) {
+      if (d.update(s.ax, s.ay, s.az, s.tMs + rep * 700).triggered) triggers++;
+    }
+  }
+  check('retrigger suppressed within retriggerMs', triggers === 1, `(triggers=${triggers})`);
+  d.reset();
+  let after = 0;
+  for (const s of shake.samples) {
+    if (d.update(s.ax, s.ay, s.az, s.tMs).triggered) after++;
+  }
+  check('reset() re-arms the detector', after === 1, `(triggers=${after})`);
 }
 
 // ---- Audit chain determinism ----
