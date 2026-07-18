@@ -39,7 +39,7 @@
 
         <div class="stage-top">
           <div id="recIndicator" class="rec"><span class="rec-dot"></span>REC <span id="recTimer">0:00</span></div>
-          <div class="privacy-badge"><span class="shield">🛡</span> Faces blurred</div>
+          <div class="privacy-badge"><span class="shield">🛡</span> Faces hidden</div>
         </div>
         <div id="fps" class="fps-chip">— fps</div>
         <div id="incidentBanner" class="incident-banner"></div>
@@ -53,10 +53,11 @@
                 <circle cx="24" cy="24" r="3" fill="#38bdf8"/>
               </svg>
             </div>
-            <h2>Session-based privacy body-cam</h2>
-            <p>Faces are blurred live. Flag an incident and the unblurred footage is
-               sealed for authorized review — with the buildup captured.</p>
-            <span class="idle-hint">Press ● Record to begin</span>
+            <h2>Your personal safety camera</h2>
+            <p>Faces are automatically hidden to protect everyone's privacy.
+               If something happens, press <strong>Alert</strong> (or say your safety
+               word) — the original video is kept safe for later.</p>
+            <span class="idle-hint">Tap the red button to start</span>
           </div>
         </div>
       </div>
@@ -65,11 +66,11 @@
 
       <div class="controls">
         <button id="eventBtn" class="ctrl-event" disabled>
-          <span class="ev-dot"></span> Event
+          <span class="ev-dot"></span> Alert
         </button>
         <div class="record-wrap">
-          <button id="startBtn" class="record start" aria-label="Start session"><span class="rec-glyph"></span></button>
-          <button id="stopBtn" class="record stop" aria-label="Stop session" disabled><span class="stop-glyph"></span></button>
+          <button id="startBtn" class="record start" aria-label="Start recording"><span class="rec-glyph"></span></button>
+          <button id="stopBtn" class="record stop" aria-label="Stop recording" disabled><span class="stop-glyph"></span></button>
         </div>
         <div class="ctrl-spacer" aria-hidden="true"></div>
       </div>
@@ -77,90 +78,91 @@
 
     <!-- ===== Status ===== -->
     <div class="status-strip">
-      <span id="rawPill" class="chip good">raw: —</span>
-      <span id="audioPill" class="chip">audio: —</span>
-      <span id="wakePill" class="chip">wake-lock: none</span>
-      <span id="incidentCount" class="chip">incidents: 0</span>
+      <span id="rawPill" class="chip good">Original video: —</span>
+      <span id="audioPill" class="chip">Sound: —</span>
+      <span id="incidentCount" class="chip">Alerts: 0</span>
     </div>
-    <p id="status" class="status-line">Idle. Press Record to request camera access.</p>
+    <p id="status" class="status-line">Ready. Tap the red button to start.</p>
 
     <details class="sheet">
-      <summary>Settings &amp; diagnostics</summary>
+      <summary>Settings</summary>
       <div class="sheet-body">
         <label class="slider">
-          <span class="slider-label">Animal threat sensitivity <span id="sensitivityVal">50%</span></span>
+          <span class="slider-label">Animal alert sensitivity <span id="sensitivityVal">50%</span></span>
           <input id="sensitivity" type="range" min="0" max="100" value="50" />
         </label>
 
         <div class="setting-block">
           <label class="switch-row">
             <input type="checkbox" id="voiceEnable" />
-            <span>Voice trigger word</span>
-            <span id="voiceStatus" class="chip mini">voice: off</span>
+            <span>Safety word</span>
+            <span id="voiceStatus" class="chip mini">off</span>
           </label>
           <input id="voiceWord" class="text-input" type="text" inputmode="text"
                  autocapitalize="none" autocomplete="off" placeholder="e.g. help" value="help" />
-          <p class="fine">Speak this word to flag an incident hands-free. Uses the browser
-             speech API — on iOS it needs a separate permission and sends audio to Apple.</p>
+          <p class="fine">Say this word while recording to raise an alert without touching
+             the phone. Uses your browser's speech service — on iPhone it may ask for an
+             extra permission.</p>
         </div>
 
         <div class="diag-row">
           <span id="detPill" class="chip">detector: —</span>
           <span id="deterrentPill" class="chip">deterrent: ready</span>
           <span id="soundPill" class="chip">sound: —</span>
+          <span id="wakePill" class="chip">stay-awake: off</span>
         </div>
       </div>
     </details>
 
     <!-- ===== Review ===== -->
     <div id="reviewHeader" class="review-header" hidden>
-      <h2>Session review</h2>
-      <p class="section-sub">Recording finished. Blurred footage is free to view; raw evidence needs authorization.</p>
+      <h2>Your recording</h2>
+      <p class="section-sub">The privacy video is ready to watch and share. The original stays locked until you unlock it.</p>
     </div>
 
     <section id="playback" class="review-card" hidden>
       <div class="card-head">
-        <h3>Blurred recording</h3>
-        <span class="tag-badge free">Privacy-safe · free</span>
+        <h3>Privacy video</h3>
+        <span class="tag-badge free">Faces hidden — safe to share</span>
       </div>
       <video id="playbackVideo" controls playsinline></video>
-      <a id="downloadLink" class="btn ghost" download>Download blurred file</a>
+      <a id="downloadLink" class="btn ghost" download>Save privacy video</a>
     </section>
 
     <section id="evidence" class="review-card" hidden>
       <div class="card-head">
-        <h3>Sealed raw evidence</h3>
-        <span class="tag-badge locked">Authorization required</span>
+        <h3>Original video</h3>
+        <span class="tag-badge locked">🔒 Locked</span>
       </div>
       <p class="section-sub">
-        The unblurred footage exists but is <strong>sealed</strong>. Each incident reaches back
-        <span id="prerollLabel">6</span>s before the trigger (the buildup). Unsealing simulates
-        approver authorization and is written to the audit log.
+        The original video (faces visible) is kept <strong>locked</strong>. Each alert below
+        includes the <span id="prerollLabel">6</span> seconds <em>before</em> it happened.
+        Unlocking is always noted in the activity log.
       </p>
       <ul id="segmentList" class="segment-list"></ul>
       <div id="rawPlayerWrap" class="raw-player" hidden>
         <div class="raw-player-head">
-          <span id="rawPlayerLabel">Unsealed segment</span>
+          <span id="rawPlayerLabel">Unlocked alert</span>
           <button id="rawPlayerClose" class="btn ghost small">Close</button>
         </div>
         <video id="rawVideo" controls playsinline></video>
-        <p class="fine">Playback is clamped to the incident window; the rest of the raw stays sealed.</p>
+        <p class="fine">Only this alert's part of the video plays — the rest stays locked.</p>
       </div>
     </section>
 
     <section id="auditSection" class="review-card" hidden>
       <div class="card-head">
-        <h3>Audit log</h3>
-        <span class="tag-badge chain">Append-only · hash-chained</span>
+        <h3>Activity log</h3>
+        <span class="tag-badge chain">Tamper-evident</span>
       </div>
       <ol id="auditList" class="audit-list"></ol>
     </section>
 
     <!-- ===== Scope ===== -->
     <details class="scope-note">
-      <summary>About this proof-of-concept &amp; its limits</summary>
+      <summary>About this demo version</summary>
       <div class="scope-body">
-        <p>This is a <strong>throwaway demo</strong> to validate the core loop, not the shippable
+        <p>This is an <strong>early demo</strong> to try out the idea — not the finished
            product. It deliberately does <strong>not</strong> provide:</p>
         <ul>
           <li><strong>Encryption at rest</strong> — no Secure-Enclave / Keystore key storage; the raw

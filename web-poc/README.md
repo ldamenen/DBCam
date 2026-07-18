@@ -39,10 +39,16 @@ or plan.
 also required at runtime — the MediaPipe models are loaded from a CDN.
 
 ```bash
-cd web-poc
+# serve the REPO ROOT (the app imports the shared Core from ../core/)
 python3 -m http.server 8000
-# then open http://localhost:8000  (Chrome/Edge/Firefox; iOS Safari has caveats below)
+# then open http://localhost:8000/web-poc/  (Chrome/Edge/Firefox; iOS Safari has caveats below)
 ```
+
+The app is **fully self-contained**: MediaPipe's JS/wasm and both detection models are
+vendored under `web-poc/vendor/`, and a service worker caches everything, so after the
+first load it runs with no network at all (ARCHITECTURE §0). The decision logic
+(threat scoring, incidents, policy, sealing rules, audit chain) lives in the shared
+[`core/`](../core/) and is covered by golden fixtures (`node core/test/run.mjs`).
 
 Press **Start session**, grant camera (+ mic if the active profile allows it), and
 you should see the **blurred** (pixelated) preview. Detection boxes, an FPS counter,

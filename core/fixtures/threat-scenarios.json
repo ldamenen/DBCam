@@ -1,0 +1,1335 @@
+{
+  "meta": {
+    "frameW": 1280,
+    "frameH": 720,
+    "description": "Golden threat-scoring scenarios. hostile = expected final hostile state after the full sequence."
+  },
+  "scenarios": [
+    {
+      "name": "static-corner-dog",
+      "expect": {
+        "hostile": false
+      },
+      "frames": [
+        {
+          "tMs": 0,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 20,
+              "y": 20,
+              "w": 120,
+              "h": 120,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 100,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 20,
+              "y": 20,
+              "w": 120,
+              "h": 120,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 200,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 20,
+              "y": 20,
+              "w": 120,
+              "h": 120,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 300,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 20,
+              "y": 20,
+              "w": 120,
+              "h": 120,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 400,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 20,
+              "y": 20,
+              "w": 120,
+              "h": 120,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 500,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 20,
+              "y": 20,
+              "w": 120,
+              "h": 120,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 600,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 20,
+              "y": 20,
+              "w": 120,
+              "h": 120,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 700,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 20,
+              "y": 20,
+              "w": 120,
+              "h": 120,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 800,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 20,
+              "y": 20,
+              "w": 120,
+              "h": 120,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 900,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 20,
+              "y": 20,
+              "w": 120,
+              "h": 120,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1000,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 20,
+              "y": 20,
+              "w": 120,
+              "h": 120,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1100,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 20,
+              "y": 20,
+              "w": 120,
+              "h": 120,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1200,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 20,
+              "y": 20,
+              "w": 120,
+              "h": 120,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1300,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 20,
+              "y": 20,
+              "w": 120,
+              "h": 120,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1400,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 20,
+              "y": 20,
+              "w": 120,
+              "h": 120,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1500,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 20,
+              "y": 20,
+              "w": 120,
+              "h": 120,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1600,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 20,
+              "y": 20,
+              "w": 120,
+              "h": 120,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "calm-walk-up",
+      "expect": {
+        "hostile": false
+      },
+      "frames": [
+        {
+          "tMs": 0,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 490,
+              "y": 210,
+              "w": 300,
+              "h": 300,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 100,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 486.875,
+              "y": 206.875,
+              "w": 306.25,
+              "h": 306.25,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 200,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 483.75,
+              "y": 203.75,
+              "w": 312.5,
+              "h": 312.5,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 300,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 480.625,
+              "y": 200.625,
+              "w": 318.75,
+              "h": 318.75,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 400,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 477.5,
+              "y": 197.5,
+              "w": 325,
+              "h": 325,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 500,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 474.375,
+              "y": 194.375,
+              "w": 331.25,
+              "h": 331.25,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 600,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 471.25,
+              "y": 191.25,
+              "w": 337.5,
+              "h": 337.5,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 700,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 468.125,
+              "y": 188.125,
+              "w": 343.75,
+              "h": 343.75,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 800,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 465,
+              "y": 185,
+              "w": 350,
+              "h": 350,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 900,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 461.875,
+              "y": 181.875,
+              "w": 356.25,
+              "h": 356.25,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1000,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 458.75,
+              "y": 178.75,
+              "w": 362.5,
+              "h": 362.5,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1100,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 455.625,
+              "y": 175.625,
+              "w": 368.75,
+              "h": 368.75,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1200,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 452.5,
+              "y": 172.5,
+              "w": 375,
+              "h": 375,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1300,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 449.375,
+              "y": 169.375,
+              "w": 381.25,
+              "h": 381.25,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1400,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 446.25,
+              "y": 166.25,
+              "w": 387.5,
+              "h": 387.5,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1500,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 443.125,
+              "y": 163.125,
+              "w": 393.75,
+              "h": 393.75,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1600,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 440,
+              "y": 160,
+              "w": 400,
+              "h": 400,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "silent-charge",
+      "expect": {
+        "hostile": true
+      },
+      "frames": [
+        {
+          "tMs": 0,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 540,
+              "y": 260,
+              "w": 200,
+              "h": 200,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 100,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 528.75,
+              "y": 248.75,
+              "w": 222.5,
+              "h": 222.5,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 200,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 517.5,
+              "y": 237.5,
+              "w": 245,
+              "h": 245,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 300,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 506.25,
+              "y": 226.25,
+              "w": 267.5,
+              "h": 267.5,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 400,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 495,
+              "y": 215,
+              "w": 290,
+              "h": 290,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 500,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 483.75,
+              "y": 203.75,
+              "w": 312.5,
+              "h": 312.5,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 600,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 472.5,
+              "y": 192.5,
+              "w": 335,
+              "h": 335,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 700,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 461.25,
+              "y": 181.25,
+              "w": 357.5,
+              "h": 357.5,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 800,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 450,
+              "y": 170,
+              "w": 380,
+              "h": 380,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 900,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 438.75,
+              "y": 158.75,
+              "w": 402.5,
+              "h": 402.5,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1000,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 427.5,
+              "y": 147.5,
+              "w": 425,
+              "h": 425,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1100,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 416.25,
+              "y": 136.25,
+              "w": 447.5,
+              "h": 447.5,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1200,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 405,
+              "y": 125,
+              "w": 470,
+              "h": 470,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1300,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 393.75,
+              "y": 113.75,
+              "w": 492.5,
+              "h": 492.5,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1400,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 382.5,
+              "y": 102.5,
+              "w": 515,
+              "h": 515,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1500,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 371.25,
+              "y": 91.25,
+              "w": 537.5,
+              "h": 537.5,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1600,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 360,
+              "y": 80,
+              "w": 560,
+              "h": 560,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "close-quiet-dog",
+      "expect": {
+        "hostile": false
+      },
+      "frames": [
+        {
+          "tMs": 0,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 100,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 200,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 300,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 400,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 500,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 600,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 700,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 800,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 900,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1000,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1100,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1200,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1300,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1400,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1500,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1600,
+          "audioLevel": 0,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "close-dog-barking",
+      "expect": {
+        "hostile": true,
+        "reasonsInclude": [
+          "barking/loud"
+        ]
+      },
+      "frames": [
+        {
+          "tMs": 0,
+          "audioLevel": 0.9,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 100,
+          "audioLevel": 0.9,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 200,
+          "audioLevel": 0.9,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 300,
+          "audioLevel": 0.9,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 400,
+          "audioLevel": 0.9,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 500,
+          "audioLevel": 0.9,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 600,
+          "audioLevel": 0.9,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 700,
+          "audioLevel": 0.9,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 800,
+          "audioLevel": 0.9,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 900,
+          "audioLevel": 0.9,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1000,
+          "audioLevel": 0.9,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1100,
+          "audioLevel": 0.9,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1200,
+          "audioLevel": 0.9,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1300,
+          "audioLevel": 0.9,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1400,
+          "audioLevel": 0.9,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1500,
+          "audioLevel": 0.9,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        },
+        {
+          "tMs": 1600,
+          "audioLevel": 0.9,
+          "animals": [
+            {
+              "x": 390,
+              "y": 110,
+              "w": 500,
+              "h": 500,
+              "score": 0.9,
+              "label": "dog"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "loud-sound-no-animal",
+      "expect": {
+        "hostile": false
+      },
+      "frames": [
+        {
+          "tMs": 0,
+          "audioLevel": 0.95,
+          "animals": []
+        },
+        {
+          "tMs": 100,
+          "audioLevel": 0.95,
+          "animals": []
+        },
+        {
+          "tMs": 200,
+          "audioLevel": 0.95,
+          "animals": []
+        },
+        {
+          "tMs": 300,
+          "audioLevel": 0.95,
+          "animals": []
+        },
+        {
+          "tMs": 400,
+          "audioLevel": 0.95,
+          "animals": []
+        },
+        {
+          "tMs": 500,
+          "audioLevel": 0.95,
+          "animals": []
+        },
+        {
+          "tMs": 600,
+          "audioLevel": 0.95,
+          "animals": []
+        },
+        {
+          "tMs": 700,
+          "audioLevel": 0.95,
+          "animals": []
+        },
+        {
+          "tMs": 800,
+          "audioLevel": 0.95,
+          "animals": []
+        },
+        {
+          "tMs": 900,
+          "audioLevel": 0.95,
+          "animals": []
+        },
+        {
+          "tMs": 1000,
+          "audioLevel": 0.95,
+          "animals": []
+        },
+        {
+          "tMs": 1100,
+          "audioLevel": 0.95,
+          "animals": []
+        },
+        {
+          "tMs": 1200,
+          "audioLevel": 0.95,
+          "animals": []
+        },
+        {
+          "tMs": 1300,
+          "audioLevel": 0.95,
+          "animals": []
+        },
+        {
+          "tMs": 1400,
+          "audioLevel": 0.95,
+          "animals": []
+        },
+        {
+          "tMs": 1500,
+          "audioLevel": 0.95,
+          "animals": []
+        },
+        {
+          "tMs": 1600,
+          "audioLevel": 0.95,
+          "animals": []
+        }
+      ]
+    }
+  ]
+}

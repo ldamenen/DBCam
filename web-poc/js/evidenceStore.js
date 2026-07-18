@@ -1,101 +1,47 @@
-// evidenceStore.js
-// §2.2 Evidence Sealer + Encrypted Store (simplified for the web PoC).
-//
-// Holds the two recordings produced this session:
-//   - blurred: the privacy-safe default (freely reviewable).
-//   - raw:     the unblurred camera recording ("raw exists but is sealed", §1).
-//
-// From the incident windows it builds SEALED SEGMENTS: each is a [startSec, endSec]
-// range into the raw recording, reaching back `prerollSeconds` before the trigger so
-// the buildup is captured. A segment stays sealed until it is explicitly UNSEALED,
-// which (in native) requires split-key authorization and is written to the audit log
-// (§6). Here the authorization is simulated (a confirm), but every unseal is still
-// logged, and playback is clamped to the segment window so the rest of the raw stays
-// effectively sealed.
+// evidenceStore.js — WEB ADAPTER around the Core EvidenceLedger (ARCHITECTURE §4).
+// The Core owns segment math, seal state, and the §6 rules (unseal-to-view,
+// export-only-after-unseal, everything audit-logged). This adapter owns the
+// platform bytes: recording blobs, object URLs, filenames.
 //
 // NOT production security (§11.2): the raw blob is not encrypted at rest and the
-// "authorization" is a UI gate, not a cryptographic one.
+// "authorization" is a UI gate, not a cryptographic one (manifest: secureSealing
+// unsupported on web).
 
-import { CONFIG } from './config.js';
+import { EvidenceLedger } from '../../core/src/evidence.js';
 
 export class EvidenceStore {
   /** @param {{auditLog: import('./auditLog.js').AuditLog}} deps */
   constructor({ auditLog } = {}) {
-    this.auditLog = auditLog;
+    this.ledger = new EvidenceLedger({ auditLog });
     this.blurred = null; // {blob,url,mimeType}
     this.raw = null;     // {blob,url,mimeType} | null when policy = blur-at-capture
-    this.rawMode = 'raw-sealed';
-    /** @type {Array<{index:number, reason:string, reasons:string[], startSec:number, endSec:number, unsealed:boolean}>} */
-    this.segments = [];
   }
 
   setBlurred(result) { this.blurred = result; }
-  setRaw(result) { this.raw = result; }
-  setRawMode(mode) { this.rawMode = mode; }
+  setRaw(result) {
+    this.raw = result;
+    this.ledger.setRawAvailable(!!result);
+  }
+  setRawMode(mode) { this.ledger.setRawMode(mode); }
 
-  /**
-   * Build sealed segments from incident windows.
-   * @param {Array} incidents from IncidentDetector (startMs/endMs in perf-now ms)
-   * @param {number} recorderStartMs perf-now ms when the raw recorder started (t=0)
-   * @param {number} stopMs perf-now ms at session stop (fallback end)
-   */
+  get segments() { return this.ledger.segments; }
   buildSegments(incidents, recorderStartMs, stopMs) {
-    const preroll = CONFIG.incident.prerollSeconds;
-    this.segments = incidents.map((inc, i) => {
-      const rawStart = Math.max(0, (inc.startMs - recorderStartMs) / 1000 - preroll);
-      const rawEnd = ((inc.endMs || stopMs) - recorderStartMs) / 1000;
-      return {
-        index: i + 1,
-        reason: inc.reason,
-        reasons: inc.reasons || [inc.reason],
-        startSec: rawStart,
-        endSec: Math.max(rawEnd, rawStart + 0.3),
-        unsealed: false,
-      };
-    });
-    return this.segments;
+    return this.ledger.buildSegments(incidents, recorderStartMs, stopMs);
   }
+  hasRaw() { return this.ledger.hasRaw(); }
 
-  hasRaw() {
-    return this.rawMode === 'raw-sealed' && !!this.raw;
-  }
-
-  /**
-   * Authorize + unseal a segment. Simulates the approver/split-key step, logs it to
-   * the audit trail, and returns the playable window.
-   * @returns {Promise<{startSec:number, endSec:number, url:string}|null>}
-   */
+  /** Unseal via the Core (logged), then attach the platform playback URL. */
   async unseal(segment, nowMs) {
-    if (!this.hasRaw()) return null;
-    segment.unsealed = true;
-    if (this.auditLog) {
-      await this.auditLog.append(
-        'raw-unseal',
-        { segment: segment.index, reason: segment.reason, window: [round1(segment.startSec), round1(segment.endSec)] },
-        nowMs,
-      );
-    }
-    return { startSec: segment.startSec, endSec: segment.endSec, url: this.raw.url };
+    const win = await this.ledger.unseal(segment, nowMs);
+    if (!win) return null;
+    return { ...win, url: this.raw.url };
   }
 
-  /**
-   * Export the raw for an UNSEALED segment (§6: export under authorization, logged).
-   * Browser caveat: we cannot trim to the incident window without a re-encode, so
-   * this hands back the full raw session file; the in-app player stays clamped.
-   * @returns {Promise<{url:string, filename:string}|null>}
-   */
+  /** Export via the Core rules (logged), then attach platform bytes + extension. */
   async exportRaw(segment, nowMs) {
-    if (!this.hasRaw() || !segment.unsealed) return null;
-    if (this.auditLog) {
-      await this.auditLog.append(
-        'raw-export',
-        { segment: segment.index, reason: segment.reason, note: 'full raw file (browser cannot trim)' },
-        nowMs,
-      );
-    }
+    const exp = await this.ledger.exportRaw(segment, nowMs, 'full raw file (browser cannot trim)');
+    if (!exp) return null;
     const ext = this.raw.mimeType.includes('mp4') ? 'mp4' : 'webm';
-    return { url: this.raw.url, filename: `dbcam-raw-incident-${segment.index}.${ext}` };
+    return { url: this.raw.url, filename: `${exp.filenameBase}.${ext}` };
   }
 }
-
-function round1(n) { return Math.round(n * 10) / 10; }

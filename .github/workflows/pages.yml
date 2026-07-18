@@ -1,14 +1,20 @@
-name: Deploy web PoC to GitHub Pages
+name: Deploy web client to GitHub Pages
 
-# Publishes web-poc/ as the site root, so the PoC is reachable at
-#   https://<owner>.github.io/<repo>/
-# over HTTPS — which is required for getUserMedia (camera) to work on iOS Safari.
+# Publishes the web client + shared Core over HTTPS (required for getUserMedia on
+# iOS Safari). Site layout (ARCHITECTURE §7):
+#   /            -> redirect to /web-poc/
+#   /web-poc/    -> the app (imports ../core/src/* relative to the site root)
+#   /core/       -> the shared decision Core
+# The old bookmark URL https://<owner>.github.io/<repo>/ keeps working via the
+# root redirect.
 
 on:
   push:
     branches: [main]
     paths:
       - 'web-poc/**'
+      - 'core/**'
+      - 'index.html'
       - '.github/workflows/pages.yml'
   workflow_dispatch: {}
 
@@ -40,11 +46,20 @@ jobs:
         with:
           enablement: true
 
-      # Upload only the web-poc folder so index.html sits at the site root.
+      # Assemble the site: web client + Core + root redirect. Assembling into
+      # _site (instead of uploading the repo root) keeps .git and docs out of
+      # the published artifact.
+      - name: Assemble site
+        run: |
+          mkdir _site
+          cp -r web-poc _site/web-poc
+          cp -r core _site/core
+          cp index.html _site/index.html
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: web-poc
+          path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment

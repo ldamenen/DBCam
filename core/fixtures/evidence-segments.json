@@ -1,0 +1,65 @@
+{
+  "meta": {
+    "prerollSeconds": 6,
+    "description": "Incident windows (ms, monotonic) -> raw-recording segments (s)."
+  },
+  "cases": [
+    {
+      "name": "basic-with-preroll",
+      "recorderStartMs": 1000,
+      "stopMs": 61000,
+      "incidents": [
+        {
+          "reason": "manual",
+          "startMs": 21000,
+          "endMs": 27000
+        }
+      ],
+      "expect": [
+        {
+          "index": 1,
+          "startSec": 14,
+          "endSec": 26
+        }
+      ]
+    },
+    {
+      "name": "preroll-clamped-at-zero",
+      "recorderStartMs": 1000,
+      "stopMs": 31000,
+      "incidents": [
+        {
+          "reason": "voice",
+          "startMs": 3000,
+          "endMs": 9000
+        }
+      ],
+      "expect": [
+        {
+          "index": 1,
+          "startSec": 0,
+          "endSec": 8
+        }
+      ]
+    },
+    {
+      "name": "open-incident-ends-at-stop",
+      "recorderStartMs": 0,
+      "stopMs": 30000,
+      "incidents": [
+        {
+          "reason": "hostile-animal",
+          "startMs": 20000,
+          "endMs": null
+        }
+      ],
+      "expect": [
+        {
+          "index": 1,
+          "startSec": 14,
+          "endSec": 30
+        }
+      ]
+    }
+  ]
+}

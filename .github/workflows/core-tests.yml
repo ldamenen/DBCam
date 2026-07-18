@@ -1,0 +1,34 @@
+name: Core conformance tests
+
+# The shared Core must pass its golden fixtures on every change (ARCHITECTURE §6).
+# The iOS/Android clients will run the SAME fixtures through their embedded Core.
+
+on:
+  push:
+    branches: ['main', 'claude/**']
+    paths:
+      - 'core/**'
+      - 'web-poc/js/**'
+      - '.github/workflows/core-tests.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax-check all modules
+        run: |
+          for f in core/src/*.js web-poc/js/*.js; do node --check "$f"; done
+      - name: Run Core conformance fixtures
+        run: node core/test/run.mjs
+      - name: Fixtures are up to date
+        run: |
+          node core/test/gen-fixtures.mjs
+          git diff --exit-code core/fixtures/

@@ -27,6 +27,29 @@ import { EvidenceStore } from './evidenceStore.js';
 import { SessionController } from './sessionController.js';
 import { AuditLog } from './auditLog.js';
 import { UI } from './ui.js';
+import { buildManifest, summarize } from '../../core/src/capabilities.js';
+
+// Offline support (self-contained after first load; ARCHITECTURE §0).
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+
+// WEB capability report (ARCHITECTURE §5) — honest about this platform's limits.
+const CAPABILITIES = buildManifest({
+  camera: { supported: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) },
+  faceDetection: { supported: true },
+  animalDetection: { supported: true },
+  audioMonitor: { supported: !!(window.AudioContext || window.webkitAudioContext) },
+  voiceTrigger: {
+    supported: VoiceTrigger.isSupported(),
+    selfContained: false, // Web Speech API routes audio to vendor servers
+    reason: VoiceTrigger.isSupported() ? 'Web Speech API uses vendor servers' : 'API unavailable',
+  },
+  deterrent: { supported: !!(window.AudioContext || window.webkitAudioContext) },
+  rawRecording: { supported: !!window.MediaRecorder },
+  secureSealing: { supported: false, reason: 'no hardware keystore in the browser' },
+  backgroundSafe: { supported: false, reason: 'browser suspends hidden tabs' },
+});
 
 const ui = new UI();
 
@@ -61,7 +84,7 @@ let lastAnimals = [];
 
 ui.onSensitivity((v) => animalDeterrent.setSensitivity(v));
 ui.setVersion(CONFIG.version);
-ui.setStatus('Idle. Press Start to request camera + mic.');
+ui.setStatus('Ready. Tap the red button to start.');
 ui.showProfile(policy.getProfile());
 
 // Restore voice-trigger settings and reflect availability.
@@ -128,7 +151,7 @@ function fireEvent(reason, nowMs, detail = {}) {
 
 async function start() {
   ui.setRunning(true);
-  ui.setStatus('Resolving policy profile…');
+  ui.setStatus('Getting ready…');
 
   // §7: capture behavior is read from the policy profile, not hard-coded.
   const profile = await policy.resolveForSession();
@@ -138,7 +161,7 @@ async function start() {
   // Prime the audio context from this user gesture (autoplay policy).
   deterrentSound.ensureContext();
 
-  ui.setStatus('Requesting camera…');
+  ui.setStatus('Turning on the camera…');
   capture = new CaptureLayer();
   const info = await capture.start(profile.audioEnabled);
   ui.sizeCanvases(info.width, info.height);
@@ -146,12 +169,14 @@ async function start() {
   faceBlur = new FaceBlur(ui.el.preview);
   faceBlur.resize(info.width, info.height);
 
-  ui.setStatus('Loading on-device models (MediaPipe)…');
+  ui.setStatus('Loading the privacy filter…');
   detection = new Detection();
   await detection.init();
 
   session = new SessionController({ auditLog });
   await session.start(performance.now());
+  // Record this platform's capability manifest with the session (auditable honesty).
+  auditLog.append('capabilities', summarize(CAPABILITIES), performance.now());
   ui.setWake(session.hasWakeLock());
 
   incident = new IncidentDetector({
@@ -203,8 +228,10 @@ async function start() {
   applyVoice(); // begin listening for the trigger word if enabled
   frameCount = 0;
   lastFrameTs = performance.now();
-  const rawNote = rawRecorder ? 'raw sealed in background' : 'blur-at-capture (no raw)';
-  ui.setStatus(`Recording ${info.width}×${info.height}. Preview is BLURRED · ${rawNote}.`);
+  const rawNote = rawRecorder
+    ? 'the original is kept locked in the background'
+    : 'the original is not kept';
+  ui.setStatus(`Recording — faces are hidden; ${rawNote}.`);
   rafId = requestAnimationFrame(loop);
 }
 
@@ -282,7 +309,7 @@ async function stop() {
   if (!running) return;
   running = false;
   cancelAnimationFrame(rafId);
-  ui.setStatus('Finalizing recordings…');
+  ui.setStatus('Saving your video…');
 
   const stopMs = performance.now();
   voice.stop();
@@ -313,8 +340,8 @@ async function stop() {
     prerollSeconds: CONFIG.incident.prerollSeconds,
     onUnseal: async (seg, rowEl) => {
       const ok = window.confirm(
-        `Authorize unsealing Incident ${seg.index} (${seg.reasons.join(', ')})?\n\n` +
-        'In production this needs approver / split-key authorization. This action is written to the audit log.',
+        `Unlock Alert ${seg.index} (${ui.formatReasons(seg.reasons)})?\n\n` +
+        'The original video with faces visible will play. This is noted in the activity log.',
       );
       if (!ok) return;
       const win = await evidence.unseal(seg, performance.now());
@@ -332,7 +359,7 @@ async function stop() {
         a.remove();
         ui.renderAuditLog(auditLog.toJSON());
       });
-      ui.playRawWindow(win.url, win.startSec, win.endSec, `Incident ${seg.index} — ${seg.reasons.join(', ')}`);
+      ui.playRawWindow(win.url, win.startSec, win.endSec, `Alert ${seg.index} — ${ui.formatReasons(seg.reasons)}`);
       ui.renderAuditLog(auditLog.toJSON());
     },
   });
@@ -340,8 +367,14 @@ async function stop() {
 
   const n = incident.count();
   ui.setSessionState(blurredResult ? 'review' : 'idle');
-  ui.setStatus(
-    `Session stopped. Blurred recording ready · ${n} incident${n === 1 ? '' : 's'} ` +
-    `${evidence.hasRaw() ? 'sealed (authorize to view raw)' : 'flagged (policy: no raw retained)'}.`,
-  );
+  if (!blurredResult) {
+    ui.setStatus('Stopped. (No video was saved.)');
+  } else if (n === 0) {
+    ui.setStatus('Done — your video is ready below. No alerts this time.');
+  } else {
+    ui.setStatus(
+      `Done — your video is ready below. ${n} alert${n === 1 ? '' : 's'} ` +
+      `${evidence.hasRaw() ? 'kept safely (unlock below to view)' : 'noted'}.`,
+    );
+  }
 }

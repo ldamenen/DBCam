@@ -8,15 +8,21 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+// Serve the REPO ROOT (site layout: /web-poc/ app + /core/ shared Core), matching
+// the deployed GitHub Pages structure.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.join(__dirname, '..');
 const PORT = 8124;
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm' };
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent(req.url.split('?')[0]);
-  if (p === '/') p = '/index.html';
-  const file = path.join(__dirname, p);
-  if (!file.startsWith(__dirname) || !fs.existsSync(file)) { res.writeHead(404); return res.end('nf'); }
+  if (p.endsWith('/')) p += 'index.html';
+  const file = path.join(ROOT, p);
+  if (!file.startsWith(ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+    res.writeHead(404); return res.end('nf');
+  }
   res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
+  if (req.method === 'HEAD') return res.end();
   fs.createReadStream(file).pipe(res);
 });
 await new Promise((r) => server.listen(PORT, r));
@@ -51,10 +57,16 @@ const browser = await chromium.launch({
   args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream',
          '--autoplay-policy=no-user-gesture-required', '--no-sandbox'],
 });
-const ctx = await browser.newContext({ permissions: ['camera', 'microphone'] });
+const ctx = await browser.newContext({
+  permissions: ['camera', 'microphone'],
+  serviceWorkers: 'block', // keep Playwright routing deterministic
+});
 const page = await ctx.newPage();
 page.on('dialog', (d) => d.accept()); // auto-authorize the unseal confirm
 
+// Stub the detection module wherever it loads from (local vendor or CDN fallback).
+await page.route('**/vision_bundle.mjs', (route) =>
+  route.fulfill({ status: 200, contentType: 'text/javascript', body: STUB }));
 await page.route('**/tasks-vision@**', (route) =>
   route.fulfill({ status: 200, contentType: 'text/javascript', body: STUB }));
 
@@ -62,7 +74,7 @@ const errors = [];
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
 
-await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'load' });
+await page.goto(`http://localhost:${PORT}/web-poc/`, { waitUntil: 'load' });
 const versionText = await page.evaluate(() => document.getElementById('version').textContent);
 await page.click('#startBtn');
 await page.waitForTimeout(3000);

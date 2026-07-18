@@ -4,6 +4,17 @@
 // counter, status pills, the active jurisdiction profile banner (§7.2 "show the
 // user which profile is active"), the incident banner, and playback/download.
 
+// Plain-language labels for trigger reasons (non-technical users).
+const REASON_LABELS = {
+  manual: 'button pressed',
+  voice: 'safety word',
+  'hostile-animal': 'animal alert',
+  'animal-approach': 'animal alert',
+  audio: 'loud sound',
+  imu: 'sudden movement',
+};
+const reasonText = (reasons) => (reasons || []).map((r) => REASON_LABELS[r] || r).join(', ');
+
 export class UI {
   constructor() {
     this.el = {
@@ -99,7 +110,19 @@ export class UI {
     if (typeof enabled === 'boolean') this.el.voiceEnable.checked = enabled;
     if (typeof word === 'string' && word) this.el.voiceWord.value = word;
   }
-  setVoiceStatus(text) { this.el.voiceStatus.textContent = `voice: ${text}`; }
+  setVoiceStatus(text) {
+    // Map technical states to friendly words; pass listening/heard strings through.
+    const friendly = {
+      unsupported: 'not available in this browser',
+      denied: 'microphone blocked',
+      'no-mic': 'no microphone found',
+      error: 'not working',
+      'starting…': 'starting…',
+      ready: 'ready',
+      off: 'off',
+    };
+    this.el.voiceStatus.textContent = friendly[text] || text;
+  }
   flashVoiceHeard() {
     this.el.voiceStatus.classList.add('hit');
     setTimeout(() => this.el.voiceStatus.classList.remove('hit'), 1200);
@@ -115,20 +138,22 @@ export class UI {
   }
 
   showProfile(profile) {
+    const days = Math.max(1, Math.round(profile.retentionSeconds / 86400));
+    const rawTxt = profile.rawMode === 'raw-sealed' ? 'kept locked' : 'not kept';
     this.el.profileBanner.textContent =
-      `Jurisdiction: ${profile.jurisdiction} · raw: ${profile.rawMode} · audio: ${profile.audioEnabled ? 'on' : 'off'} · retention: ${Math.round(profile.retentionSeconds / 3600)}h`;
-    this.el.rawPill.textContent = `raw: ${profile.rawMode}`;
-    this.el.audioPill.textContent = `audio: ${profile.audioEnabled ? 'on' : 'off'}`;
+      `Region: ${profile.jurisdiction} · Original video: ${rawTxt} · Sound: ${profile.audioEnabled ? 'on' : 'off'} · Auto-deletes after ${days} day${days === 1 ? '' : 's'}`;
+    this.el.rawPill.textContent = `Original video: ${rawTxt}`;
+    this.el.audioPill.textContent = `Sound: ${profile.audioEnabled ? 'on' : 'off'}`;
   }
 
-  setWake(on) { this.el.wakePill.textContent = `wake-lock: ${on ? 'held' : 'none'}`; }
+  setWake(on) { this.el.wakePill.textContent = `stay-awake: ${on ? 'on' : 'off'}`; }
   setDeterrent(text) { this.el.deterrentPill.textContent = text; }
   setSoundLevel(level) {
     const pct = Math.round(level * 100);
     this.el.soundPill.textContent = `sound: ${pct}%`;
     this.el.soundPill.style.color = level > 0.45 ? 'var(--danger)' : '';
   }
-  setIncidentCount(n) { this.el.incidentCount.textContent = `incidents: ${n}`; }
+  setIncidentCount(n) { this.el.incidentCount.textContent = `Alerts: ${n}`; }
 
   sizeCanvases(w, h) {
     this.el.preview.width = w;
@@ -140,11 +165,14 @@ export class UI {
   showIncident(active, reason) {
     this.el.incidentBanner.classList.toggle('active', active);
     if (active) {
-      this.el.incidentBanner.textContent = `● INCIDENT (${reason}) — pre-roll would be sealed (native)`;
+      this.el.incidentBanner.textContent = `● Alert (${reasonText([reason])}) — original video is being kept`;
     } else {
       this.el.incidentBanner.textContent = '';
     }
   }
+
+  /** Plain-language reasons string for a segment (used by main.js labels too). */
+  formatReasons(reasons) { return reasonText(reasons); }
 
   updateFps(dtMs) {
     this._fpsSamples.push(dtMs);
@@ -203,7 +231,7 @@ export class UI {
     this.el.playbackVideo.src = url;
     this.el.downloadLink.href = url;
     const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
-    this.el.downloadLink.download = `dbcam-blurred-session.${ext}`;
+    this.el.downloadLink.download = `dbcam-privacy-video.${ext}`;
   }
 
   /**
@@ -224,7 +252,7 @@ export class UI {
     if (!segments.length) {
       const li = document.createElement('li');
       li.className = 'segment empty';
-      li.textContent = 'No incidents were flagged this session — nothing to seal.';
+      li.textContent = 'No alerts this time.';
       list.appendChild(li);
       return;
     }
@@ -235,19 +263,19 @@ export class UI {
       const info = document.createElement('div');
       info.className = 'segment-info';
       info.innerHTML =
-        `<span class="seg-idx">Incident ${seg.index}</span>` +
-        `<span class="seg-reason">${seg.reasons.join(', ')}</span>` +
+        `<span class="seg-idx">Alert ${seg.index}</span>` +
+        `<span class="seg-reason">${reasonText(seg.reasons)}</span>` +
         `<span class="seg-window">${fmt(seg.startSec)}–${fmt(seg.endSec)}</span>`;
       li.appendChild(info);
 
       const btn = document.createElement('button');
       btn.className = 'btn small';
       if (!hasRaw) {
-        btn.textContent = 'No raw retained';
+        btn.textContent = 'Original not kept';
         btn.disabled = true;
-        btn.title = 'Policy profile = blur-at-capture: raw was not recorded.';
+        btn.title = 'Your privacy settings for this region do not keep the original video.';
       } else {
-        btn.textContent = '🔒 Authorize & unseal';
+        btn.textContent = '🔒 Unlock to view';
         btn.addEventListener('click', () => onUnseal(seg, li));
       }
       li.appendChild(btn);
@@ -258,16 +286,16 @@ export class UI {
   markSegmentUnsealed(rowEl) {
     rowEl.classList.add('unsealed');
     const btn = rowEl.querySelector('button');
-    if (btn) { btn.textContent = '🔓 Unsealed'; btn.disabled = true; }
+    if (btn) { btn.textContent = '🔓 Unlocked'; btn.disabled = true; }
   }
 
-  /** Add an "Export raw" button to an unsealed segment row (logged download, §6). */
+  /** Add a "Save original" button to an unlocked alert row (logged download, §6). */
   addExportButton(rowEl, onClick) {
     if (rowEl.querySelector('.btn.export')) return;
     const btn = document.createElement('button');
     btn.className = 'btn small export';
-    btn.textContent = '⬇ Export raw';
-    btn.title = 'Downloads the full raw session file (the browser cannot trim to the incident window). The export is written to the audit log.';
+    btn.textContent = '⬇ Save original';
+    btn.title = 'Saves the original video file to your device. This is noted in the activity log.';
     btn.addEventListener('click', onClick);
     rowEl.appendChild(btn);
   }

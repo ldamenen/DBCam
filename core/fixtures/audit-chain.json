@@ -1,0 +1,55 @@
+{
+  "meta": {
+    "hash": "SHA-256",
+    "description": "Same events must produce byte-identical chains on every platform."
+  },
+  "events": [
+    {
+      "type": "session-start",
+      "detail": {},
+      "tMs": 1000
+    },
+    {
+      "type": "incident-open",
+      "detail": {
+        "reason": "manual",
+        "detail": {}
+      },
+      "tMs": 5000
+    },
+    {
+      "type": "incident-close",
+      "detail": {
+        "reason": "manual"
+      },
+      "tMs": 11000
+    },
+    {
+      "type": "raw-unseal",
+      "detail": {
+        "segment": 1,
+        "reason": "manual",
+        "window": [
+          0,
+          11
+        ]
+      },
+      "tMs": 20000
+    },
+    {
+      "type": "raw-export",
+      "detail": {
+        "segment": 1,
+        "reason": "manual"
+      },
+      "tMs": 25000
+    }
+  ],
+  "expectedChain": [
+    "68c4a966eedb91a04a66b66ba1a48c09506229112bbcc32fadc93094ebd4bee4",
+    "aa446117ab8a0af7402197367d8c6c2c89c4a4a03062f06a3523d6e72f74b6d1",
+    "d368bce12635acadc56cf3cbf36c8d434c72fbcc0d9025c4cf22d1f34fe6b807",
+    "73d103cf2c63ff84454b88dba3b85880becb69be15564c0b062471e519f69f8e",
+    "f5d2ba12e447b959298806b302a00d23c393af451e7b2d5aadbe63345d2a8896"
+  ]
+}
