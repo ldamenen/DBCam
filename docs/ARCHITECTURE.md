@@ -268,7 +268,12 @@ Rule of thumb enforced in review: **if a PR puts a number, threshold, or rule in
 
 ## 10. Migration plan from today's code
 
-Phased so the working app never breaks; each phase lands on `main` green:
+Phased so the working app never breaks; each phase lands on `main` green.
+**Status: Phase A shipped** (Core extracted as JSDoc-typed ES modules — TS-checkable,
+zero build step for web; MediaPipe + models vendored; offline service worker; golden
+fixtures + CI). **Phase B shipped** (port contracts in `contracts/`; conformance
+runner + fixtures in CI). Native embeds will bundle `core/src/` to `core.bundle.js`
+when Phase C starts.
 
 - **Phase A — Extract the Core + go self-contained.** Create `core/` and move the decision
   halves of `policyEngine / animalDeterrent / incidentDetector / evidenceStore / auditLog /
