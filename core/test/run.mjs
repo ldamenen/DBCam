@@ -12,7 +12,14 @@ import path from 'path';
 import { AnimalDeterrent } from '../src/threat.js';
 import { AuditLog } from '../src/audit.js';
 import { buildSegments, EvidenceLedger } from '../src/evidence.js';
-import { PolicyEngine, MOST_RESTRICTIVE_PROFILE } from '../src/policy.js';
+import {
+  PolicyEngine,
+  MOST_RESTRICTIVE_PROFILE,
+  POLICY_RULESET,
+  listRegions,
+  strictnessRank,
+  applyOverride,
+} from '../src/policy.js';
 import { DeterrentPolicy } from '../src/deterrent.js';
 import { buildManifest } from '../src/capabilities.js';
 import { CONFIG } from '../src/config.js';
@@ -87,6 +94,53 @@ const check = (name, cond, info = '') => {
   blocked.setRawAvailable(true);
   const [seg2] = blocked.buildSegments([{ reason: 'manual', startMs: 10000, endMs: 16000 }], 0, 30000);
   check('blur-at-capture retains no raw', (await blocked.unseal(seg2, 4)) === null);
+}
+
+// ---- Jurisdiction policy (§7): region table, strictness, override ----
+{
+  const { meta, regions, strictnessOrder, overrideCases } = fixture('policy-regions.json');
+  console.log('policy-regions:');
+  check('ruleset version matches fixture', POLICY_RULESET.version === meta.rulesetVersion,
+    `(ruleset=${POLICY_RULESET.version})`);
+
+  // Unknown / unrecognized regions fail-safe to the most restrictive profile.
+  const engine = new PolicyEngine();
+  check('default region = most restrictive', engine.getProfile() === MOST_RESTRICTIVE_PROFILE);
+  check('unrecognized region fails safe',
+    engine.setRegion('atlantis') === MOST_RESTRICTIVE_PROFILE);
+
+  for (const r of regions) {
+    const p = engine.setRegion(r.regionId);
+    const ok = p.regionId === r.regionId &&
+      p.rawMode === r.expect.rawMode &&
+      p.audioEnabled === r.expect.audioEnabled &&
+      p.retentionSeconds === r.expect.retentionSeconds &&
+      p.version === meta.rulesetVersion;
+    check(`region ${r.regionId}`, ok,
+      `(rawMode=${p.rawMode} audio=${p.audioEnabled} retention=${p.retentionSeconds})`);
+  }
+
+  const ids = listRegions().map((r) => r.id);
+  check('listRegions covers the table',
+    JSON.stringify(ids) === JSON.stringify(POLICY_RULESET.regions.map((r) => r.id)));
+  check('listRegions has labels', listRegions().every((r) => typeof r.label === 'string' && r.label.length > 0));
+
+  // strictnessRank ordering sanity: ranks strictly descend along the fixture order.
+  const ranks = strictnessOrder.map((id) => strictnessRank(engine.setRegion(id)));
+  check(`strictness order ${strictnessOrder.join(' > ')}`,
+    ranks.every((v, i) => i === 0 || ranks[i - 1] > v), `(ranks=${ranks.map((v) => v.toFixed(4))})`);
+
+  // §7.3 applyOverride: field-wise STRICTER combination, never looser.
+  for (const c of overrideCases) {
+    const out = applyOverride(c.auto, c.manual);
+    const ok = out.rawMode === c.expect.rawMode &&
+      out.audioEnabled === c.expect.audioEnabled &&
+      out.retentionSeconds === c.expect.retentionSeconds;
+    check(`override ${c.name}`, ok,
+      `(rawMode=${out.rawMode} audio=${out.audioEnabled} retention=${out.retentionSeconds})`);
+    check(`override ${c.name} not looser`,
+      strictnessRank(out) >= Math.max(strictnessRank(c.auto), strictnessRank(c.manual)) - 1e-12);
+  }
 }
 
 // ---- Policy fail-safe + deterrent cooldown + manifest ----

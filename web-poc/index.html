@@ -68,6 +68,11 @@
       </div>
 
       <div id="profileBanner" class="profile-bar">Jurisdiction: —</div>
+      <div id="regionHint" class="region-hint" hidden>
+        <span>Tip: choose where you are in Settings so the right privacy rules apply.
+          Until then the strictest rules are used.</span>
+        <button id="regionHintClose" class="region-hint-close" aria-label="Dismiss tip">✕</button>
+      </div>
 
       <div class="controls">
         <button id="eventBtn" class="ctrl-event" disabled>
@@ -101,7 +106,12 @@
     <details class="sheet">
       <summary>Settings</summary>
       <div class="sheet-body">
-        <label class="slider">
+        <label class="region-row">
+          <span class="slider-label">Where are you? This sets the privacy rules.</span>
+          <select id="regionSelect" class="text-input"></select>
+        </label>
+
+        <label class="slider setting-block">
           <span class="slider-label">Animal alert sensitivity <span id="sensitivityVal">50%</span></span>
           <input id="sensitivity" type="range" min="0" max="100" value="50" />
         </label>
@@ -186,8 +196,9 @@
           <li><strong>Cryptographic sealing / split-key authorization</strong> — the flow is
             demonstrated, but "authorization" is a UI gate and playback is only clamped, not
             cryptographically sealed.</li>
-          <li><strong>Jurisdiction enforcement</strong> — the Policy Engine is an injectable stub
-            (it does drive raw-retention on/off, but does not resolve or enforce real law).</li>
+          <li><strong>Jurisdiction enforcement</strong> — the region rules are demo values (not
+            legal advice) and there is no automatic location detection yet; you choose the
+            region in Settings, and until you do the strictest rules apply.</li>
         </ul>
         <p class="fine">These guarantees are <strong>native-only</strong> (iOS Vision/CryptoKit,
           Android ML Kit/Keystore). The animal deterrent <strong>may help avoid, definitely helps

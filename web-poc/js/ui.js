@@ -28,6 +28,9 @@ export class UI {
       fps: document.getElementById('fps'),
       status: document.getElementById('status'),
       profileBanner: document.getElementById('profileBanner'),
+      regionSelect: document.getElementById('regionSelect'),
+      regionHint: document.getElementById('regionHint'),
+      regionHintClose: document.getElementById('regionHintClose'),
       incidentBanner: document.getElementById('incidentBanner'),
       wakePill: document.getElementById('wakePill'),
       audioPill: document.getElementById('audioPill'),
@@ -74,6 +77,26 @@ export class UI {
       fn(v);
     });
   }
+
+  // --- Region picker (the rules themselves live in the Core policy table) ---
+  /** Fill the region <select> from Core listRegions() output: [{id, label}]. */
+  populateRegions(regions, selectedId) {
+    const sel = this.el.regionSelect;
+    sel.innerHTML = '';
+    for (const r of regions) {
+      const opt = document.createElement('option');
+      opt.value = r.id;
+      opt.textContent = r.label;
+      sel.appendChild(opt);
+    }
+    sel.value = selectedId;
+  }
+  onRegionChange(fn) {
+    this.el.regionSelect.addEventListener('change', () => fn(this.el.regionSelect.value));
+  }
+  /** First-run tip near the profile bar; close button wired via onRegionHintClose. */
+  showRegionHint(show) { this.el.regionHint.hidden = !show; }
+  onRegionHintClose(fn) { this.el.regionHintClose.addEventListener('click', fn); }
 
   setRunning(running) {
     this.el.startBtn.disabled = running;

@@ -1,0 +1,110 @@
+{
+  "meta": {
+    "rulesetVersion": 1,
+    "description": "Region id -> expected capture profile, plus §7.3 override cases (manual may only make rules stricter)."
+  },
+  "regions": [
+    {
+      "regionId": "unknown",
+      "expect": {
+        "rawMode": "blur-at-capture",
+        "audioEnabled": false,
+        "retentionSeconds": 86400
+      }
+    },
+    {
+      "regionId": "us-general",
+      "expect": {
+        "rawMode": "raw-sealed",
+        "audioEnabled": true,
+        "retentionSeconds": 604800
+      }
+    },
+    {
+      "regionId": "us-il",
+      "expect": {
+        "rawMode": "blur-at-capture",
+        "audioEnabled": true,
+        "retentionSeconds": 86400
+      }
+    },
+    {
+      "regionId": "eu",
+      "expect": {
+        "rawMode": "raw-sealed",
+        "audioEnabled": false,
+        "retentionSeconds": 259200
+      }
+    },
+    {
+      "regionId": "demo",
+      "expect": {
+        "rawMode": "raw-sealed",
+        "audioEnabled": true,
+        "retentionSeconds": 604800
+      }
+    }
+  ],
+  "strictnessOrder": [
+    "unknown",
+    "us-il",
+    "eu",
+    "us-general"
+  ],
+  "overrideCases": [
+    {
+      "name": "manual-looser-raw-stricter-retention",
+      "auto": {
+        "rawMode": "blur-at-capture",
+        "audioEnabled": true,
+        "retentionSeconds": 86400
+      },
+      "manual": {
+        "rawMode": "raw-sealed",
+        "audioEnabled": true,
+        "retentionSeconds": 3600
+      },
+      "expect": {
+        "rawMode": "blur-at-capture",
+        "audioEnabled": true,
+        "retentionSeconds": 3600
+      }
+    },
+    {
+      "name": "manual-turns-audio-on-gets-clamped",
+      "auto": {
+        "rawMode": "raw-sealed",
+        "audioEnabled": false,
+        "retentionSeconds": 259200
+      },
+      "manual": {
+        "rawMode": "raw-sealed",
+        "audioEnabled": true,
+        "retentionSeconds": 604800
+      },
+      "expect": {
+        "rawMode": "raw-sealed",
+        "audioEnabled": false,
+        "retentionSeconds": 259200
+      }
+    },
+    {
+      "name": "manual-strictly-stricter-wins-everywhere",
+      "auto": {
+        "rawMode": "raw-sealed",
+        "audioEnabled": true,
+        "retentionSeconds": 604800
+      },
+      "manual": {
+        "rawMode": "blur-at-capture",
+        "audioEnabled": false,
+        "retentionSeconds": 86400
+      },
+      "expect": {
+        "rawMode": "blur-at-capture",
+        "audioEnabled": false,
+        "retentionSeconds": 86400
+      }
+    }
+  ]
+}

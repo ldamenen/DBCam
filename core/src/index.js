@@ -3,7 +3,15 @@
 // Web imports these as ES modules; iOS/Android embed a bundle of this package.
 
 export { CONFIG } from './config.js';
-export { PolicyEngine, MOST_RESTRICTIVE_PROFILE } from './policy.js';
+export {
+  PolicyEngine,
+  MOST_RESTRICTIVE_PROFILE,
+  POLICY_RULESET,
+  listRegions,
+  resolveRegion,
+  strictnessRank,
+  applyOverride,
+} from './policy.js';
 export { AnimalDeterrent } from './threat.js';
 export { IncidentDetector } from './incident.js';
 export { AuditLog } from './audit.js';

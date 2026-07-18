@@ -13,7 +13,7 @@
 //   (Evidence Sealer + Store + Review UI + Audit Log).
 
 import { CONFIG } from './config.js';
-import { PolicyEngine } from './policyEngine.js';
+import { PolicyEngine, listRegions } from './policyEngine.js';
 import { CaptureLayer } from './captureLayer.js';
 import { Detection } from './detection.js';
 import { FaceBlur } from './faceBlur.js';
@@ -56,7 +56,7 @@ const ui = new UI();
 
 // Long-lived singletons.
 const auditLog = new AuditLog();
-const policy = new PolicyEngine(); // injectable stub; swap for GPS/manual resolver in Phase 7
+const policy = new PolicyEngine(); // resolves from the Core region table; defaults to the 'unknown' fail-safe
 const deterrentSound = new DeterrentSound();
 const animalDeterrent = new AnimalDeterrent();
 const audioMonitor = new AudioMonitor();
@@ -86,7 +86,35 @@ let lastAnimals = [];
 ui.onSensitivity((v) => animalDeterrent.setSensitivity(v));
 ui.setVersion(CONFIG.version);
 ui.setStatus('Ready. Tap the red button to start.');
+
+// §7 region selection — restore the user's pick; with nothing stored the Core
+// fails safe to the strictest rules ('unknown'). The rules themselves live in
+// the Core policy table — this file only stores and forwards the chosen id.
+const REGION_LS = 'dbcam.region';
+const REGION_HINT_LS = 'dbcam.regionHintDismissed';
+let storedRegion = null;
+try { storedRegion = JSON.parse(localStorage.getItem(REGION_LS)); } catch (_e) {}
+policy.setRegion(typeof storedRegion === 'string' ? storedRegion : 'unknown');
+ui.populateRegions(listRegions(), policy.getProfile().regionId);
 ui.showProfile(policy.getProfile());
+
+// First-run nudge: shown until a region is chosen or the tip is dismissed.
+let regionHintDismissed = false;
+try { regionHintDismissed = localStorage.getItem(REGION_HINT_LS) === '1'; } catch (_e) {}
+ui.showRegionHint(!storedRegion && !regionHintDismissed);
+ui.onRegionHintClose(() => {
+  ui.showRegionHint(false);
+  try { localStorage.setItem(REGION_HINT_LS, '1'); } catch (_e) {}
+});
+
+ui.onRegionChange((regionId) => {
+  const profile = policy.setRegion(regionId);
+  try { localStorage.setItem(REGION_LS, JSON.stringify(profile.regionId)); } catch (_e) {}
+  ui.showProfile(profile);
+  ui.showRegionHint(false);
+  // A live session keeps the rules it started with — the new rules apply next time.
+  if (running) ui.setStatus('Privacy rules will apply from the next recording.');
+});
 
 // Saved recordings: enforce the ACTIVE profile's retention rule (the number
 // lives in the Core policy profile, not here), then show what's kept.
@@ -185,6 +213,12 @@ async function start() {
   await session.start(performance.now());
   // Record this platform's capability manifest with the session (auditable honesty).
   auditLog.append('capabilities', summarize(CAPABILITIES), performance.now());
+  // Record which policy governed this session (§7): region + ruleset version.
+  auditLog.append(
+    'policy-resolved',
+    { regionId: profile.regionId, rawMode: profile.rawMode, version: profile.version },
+    performance.now(),
+  );
   ui.setWake(session.hasWakeLock());
 
   incident = new IncidentDetector({

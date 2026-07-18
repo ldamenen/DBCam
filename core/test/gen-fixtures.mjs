@@ -100,7 +100,50 @@ const evidenceSegments = {
   ],
 };
 
+// ---- Jurisdiction policy (§7) ----
+// Expected values are written out BY HAND here (not read from the table), so an
+// accidental edit to POLICY_RULESET fails conformance. Demo values only — the
+// table must be reviewed by counsel before real deployment.
+const DAY = 86400;
+const policyRegions = {
+  meta: {
+    rulesetVersion: 1,
+    description:
+      'Region id -> expected capture profile, plus §7.3 override cases (manual may only make rules stricter).',
+  },
+  regions: [
+    { regionId: 'unknown', expect: { rawMode: 'blur-at-capture', audioEnabled: false, retentionSeconds: 1 * DAY } },
+    { regionId: 'us-general', expect: { rawMode: 'raw-sealed', audioEnabled: true, retentionSeconds: 7 * DAY } },
+    { regionId: 'us-il', expect: { rawMode: 'blur-at-capture', audioEnabled: true, retentionSeconds: 1 * DAY } },
+    { regionId: 'eu', expect: { rawMode: 'raw-sealed', audioEnabled: false, retentionSeconds: 3 * DAY } },
+    { regionId: 'demo', expect: { rawMode: 'raw-sealed', audioEnabled: true, retentionSeconds: 7 * DAY } },
+  ],
+  // Ranks strictly descend left-to-right (strictnessRank ordering sanity).
+  strictnessOrder: ['unknown', 'us-il', 'eu', 'us-general'],
+  overrideCases: [
+    {
+      name: 'manual-looser-raw-stricter-retention',
+      auto: { rawMode: 'blur-at-capture', audioEnabled: true, retentionSeconds: 1 * DAY },
+      manual: { rawMode: 'raw-sealed', audioEnabled: true, retentionSeconds: 3600 },
+      expect: { rawMode: 'blur-at-capture', audioEnabled: true, retentionSeconds: 3600 },
+    },
+    {
+      name: 'manual-turns-audio-on-gets-clamped',
+      auto: { rawMode: 'raw-sealed', audioEnabled: false, retentionSeconds: 3 * DAY },
+      manual: { rawMode: 'raw-sealed', audioEnabled: true, retentionSeconds: 7 * DAY },
+      expect: { rawMode: 'raw-sealed', audioEnabled: false, retentionSeconds: 3 * DAY },
+    },
+    {
+      name: 'manual-strictly-stricter-wins-everywhere',
+      auto: { rawMode: 'raw-sealed', audioEnabled: true, retentionSeconds: 7 * DAY },
+      manual: { rawMode: 'blur-at-capture', audioEnabled: false, retentionSeconds: 1 * DAY },
+      expect: { rawMode: 'blur-at-capture', audioEnabled: false, retentionSeconds: 1 * DAY },
+    },
+  ],
+};
+
 writeFileSync(path.join(fixturesDir, 'threat-scenarios.json'), JSON.stringify(threatScenarios, null, 2));
 writeFileSync(path.join(fixturesDir, 'audit-chain.json'), JSON.stringify(auditChain, null, 2));
 writeFileSync(path.join(fixturesDir, 'evidence-segments.json'), JSON.stringify(evidenceSegments, null, 2));
+writeFileSync(path.join(fixturesDir, 'policy-regions.json'), JSON.stringify(policyRegions, null, 2));
 console.log('fixtures written');
