@@ -5,7 +5,7 @@
 
 export const CONFIG = {
   // Bump on every deploy so the header shows which build is loaded (cache check).
-  version: 'v0.8.1',
+  version: 'v0.8.2',
 
   capture: {
     // Target capture constraints. Native target is 1080p30 (§4 real-time budget);
@@ -59,15 +59,21 @@ export const CONFIG = {
     // the wearer (approach), and how agitated/erratic the movement is (agitation).
     // Each term is normalized against a reference value, then weighted + combined.
     threat: {
-      areaRef: 0.16,           // areaFrac that alone reads as "very close"
-      growthRef: 0.06,         // growthPerSec (areaFrac/s) reading as a fast lunge
+      areaRef: 0.20,           // areaFrac that alone reads as "very close"
+      // Approach term: box growth BELOW walkGrowthFloor (a calm walk toward the
+      // wearer) contributes ZERO — only charge-like growth scores. Full score at
+      // lungeGrowthRef. This is what keeps a passive approach from triggering.
+      walkGrowthFloor: 0.05,   // areaFrac/s of a calm walk-up — ignored
+      lungeGrowthRef: 0.18,    // areaFrac/s reading as a full-on lunge/charge
       agitationRef: 0.85,      // lateral speed (frame-fracs/s) reading as very agitated
       centerToleranceFrac: 0.36, // within this of center = aimed at the wearer
       // Four behaviour cues combined into the threat score. `audio` is a loud
       // low-frequency sound spike (bark/growl proxy) from the mic (audioMonitor.js).
-      weights: { proximity: 0.32, approach: 0.28, agitation: 0.14, audio: 0.26 },
+      // Weights chosen so proximity alone (calm dog at your feet) can NEVER fire.
+      weights: { proximity: 0.32, approach: 0.28, agitation: 0.12, audio: 0.28 },
       audioReasonAt: 0.45,     // audio term above this adds a "barking/loud" reason
-      triggerScore: 0.5,       // base threshold (at sensitivity 0.5)
+      triggerScore: 0.55,      // base threshold (at sensitivity 0.5)
+      sustainMs: 450,          // score must stay above threshold this long to fire
     },
   },
 

@@ -22,6 +22,7 @@ export class AnimalDeterrent {
   constructor() {
     this.sensitivity = CONFIG.animals.defaultSensitivity;
     this._history = []; // [{tMs, nx, ny, areaFrac}]  (nx,ny = center in 0..1)
+    this._aboveSinceMs = null; // when the score first crossed the threshold (dwell)
   }
 
   setSensitivity(v) {
@@ -57,6 +58,7 @@ export class AnimalDeterrent {
 
     if (!biggest) {
       this._history.length = 0;
+      this._aboveSinceMs = null;
       return { hostile: false, threatScore: 0, animal: null, areaFrac: 0,
         growthPerSec: 0, agitation: 0, audioLevel, centered: false, reasons: [] };
     }
@@ -96,7 +98,12 @@ export class AnimalDeterrent {
 
     // Normalized [0,1] terms.
     const proximityTerm = clamp01(areaFrac / T.areaRef);
-    const approachTerm = clamp01(Math.max(0, growthPerSec) / T.growthRef);
+    // Approach: growth below walkGrowthFloor (a calm walk-up) counts as ZERO —
+    // only charge-like growth scores. This is what keeps a passive dog walking
+    // toward the wearer from reading as a lunge.
+    const approachTerm = clamp01(
+      (Math.max(0, growthPerSec) - T.walkGrowthFloor) / (T.lungeGrowthRef - T.walkGrowthFloor),
+    );
     const agitationTerm = clamp01(agitation / T.agitationRef);
     const audioTerm = clamp01(audioLevel);
 
@@ -109,7 +116,15 @@ export class AnimalDeterrent {
     // Off-center animals are less of a direct threat: fade the score out.
     if (!centered) score *= 0.5;
 
-    const hostile = score >= this._threshold();
+    // Sustained requirement: the score must stay above threshold for sustainMs
+    // before firing, so one-frame box jitter can't spike a false alarm.
+    const above = score >= this._threshold();
+    if (above) {
+      if (this._aboveSinceMs === null) this._aboveSinceMs = nowMs;
+    } else {
+      this._aboveSinceMs = null;
+    }
+    const hostile = above && nowMs - this._aboveSinceMs >= T.sustainMs;
 
     // Human-readable contributors (for UI / incident detail).
     const reasons = [];
@@ -125,6 +140,7 @@ export class AnimalDeterrent {
 
   reset() {
     this._history.length = 0;
+    this._aboveSinceMs = null;
   }
 }
 
